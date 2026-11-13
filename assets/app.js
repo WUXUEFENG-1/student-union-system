@@ -1,4 +1,4 @@
-/* 云南工业信息职业学院应用经济学系学生会管理系统 */
+/* 云南工业信息职业学院应用经济系学生会管理系统 */
 const STORE_KEY = 'su_ms_v4';
 const SESS_KEY = 'su_current';
 
@@ -125,6 +125,80 @@ function exportCsv(filename, headers, rows) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast('已导出 ' + a.download);
+}
+
+/* ---------------- 多格式导出（Excel / Word / PDF / CSV） ---------------- */
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function buildTableHtml(headers, rows) {
+  const th = headers.map((h) => `<th>${esc(h)}</th>`).join('');
+  const trs = rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c == null ? '' : c)}</td>`).join('')}</tr>`).join('');
+  const empty = `<tr><td colspan="${headers.length}" class="empty">暂无数据</td></tr>`;
+  return `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:'Microsoft YaHei',sans-serif;font-size:13px;width:100%"><thead><tr>${th}</tr></thead><tbody>${trs || empty}</tbody></table>`;
+}
+
+function exportTable(format, filename, headers, rows) {
+  rows = rows || [];
+  if (format === 'csv') return exportCsv(filename, headers, rows);
+
+  if (format === 'excel') {
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+      <body><h3 style="font-family:'Microsoft YaHei',sans-serif">${esc(filename)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
+    downloadBlob(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' }), filename + '.xls');
+    toast('已导出 Excel：' + filename + '.xls');
+    return;
+  }
+
+  if (format === 'word') {
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+      <head><meta charset="UTF-8"><style>body{font-family:'Microsoft YaHei',sans-serif}h3{font-size:16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;font-size:13px}th{background:#eef3fb}</style></head>
+      <body><h3>${esc(filename)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
+    downloadBlob(new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8' }), filename + '.doc');
+    toast('已导出 Word：' + filename + '.doc');
+    return;
+  }
+
+  if (format === 'pdf') {
+    const w = window.open('', '_blank');
+    if (!w) { toast('请允许浏览器弹出窗口后再导出 PDF'); return; }
+    w.document.write(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${esc(filename)}</title>
+      <style>body{font-family:'Microsoft YaHei',sans-serif;padding:24px}h3{font-size:16px;margin:0 0 6px}p.sub{color:#666;font-size:12px;margin:0 0 12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;font-size:12px}th{background:#eef3fb}</style></head>
+      <body><h3>${esc(SYSTEM.full)}</h3><p class="sub">${esc(filename)}</p>${buildTableHtml(headers, rows)}</body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+    toast('已打开打印窗口，可另存为 PDF');
+  }
+}
+
+function openExportPicker(filename, headers, rows) {
+  $('#modalTitle').textContent = '导出：' + filename;
+  $('#modalOk').classList.add('hidden');
+  $('#modalCancel').textContent = '关闭';
+  modalSubmit = null;
+  $('#modalBody').innerHTML = `<p class="form-hint">选择导出格式，将按当前表格数据生成文件。</p>
+    <div class="export-grid">
+      <button class="primary-btn" data-fmt="excel">导出 Excel（.xls）</button>
+      <button class="primary-btn light" data-fmt="word">导出 Word（.doc）</button>
+      <button class="primary-btn light" data-fmt="pdf">导出 PDF（打印另存）</button>
+      <button class="primary-btn light" data-fmt="csv">导出 CSV（.csv）</button>
+    </div>`;
+  $('#modalMask').classList.remove('hidden');
+  document.querySelectorAll('#modalBody [data-fmt]').forEach((b) => {
+    b.onclick = () => {
+      exportTable(b.dataset.fmt, filename, headers, rows);
+      if (b.dataset.fmt !== 'pdf') closeModal();
+    };
+  });
 }
 
 /* ---------------- 弹窗 ---------------- */
@@ -420,7 +494,7 @@ function renderLogs() {
 
   $('#exportLogs').onclick = () => {
     const rows = logs.map((g) => [g.time, g.user, g.role, g.action, g.detail]);
-    exportCsv('操作日志_' + today(), ['时间', '操作人', '角色', '操作', '详情'], rows);
+    openExportPicker('操作日志_' + today(), ['时间', '操作人', '角色', '操作', '详情'], rows);
   };
   $('#clearLogs').onclick = () => {
     if (!confirm('确定清空全部操作日志？此操作不可恢复。')) return;
