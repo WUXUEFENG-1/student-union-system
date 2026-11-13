@@ -96,7 +96,7 @@ function renderCollect() {
   document.querySelectorAll('[data-collect-export]').forEach((b) => {
     b.onclick = () => {
       const c = db.collects.find((x) => x.id === b.dataset.collectExport);
-      exportCsv(c.title + '_' + today(), ['姓名', '提交时间'].concat(c.fields), c.submissions.map((s) => [s.name, s.date].concat(c.fields.map((f) => s.values[f] || ''))));
+      openExportPicker(c.title + '_' + today(), ['姓名', '提交时间'].concat(c.fields), c.submissions.map((s) => [s.name, s.date].concat(c.fields.map((f) => s.values[f] || ''))));
       commit('导出收集数据', c.title);
     };
   });
@@ -202,7 +202,7 @@ function renderEvent() {
   document.querySelectorAll('[data-event-export]').forEach((b) => {
     b.onclick = () => {
       const e = db.events.find((x) => x.id === b.dataset.eventExport);
-      exportCsv(e.title + '_报名名单_' + today(), ['姓名', '部门', '报名时间'], e.signups.map((s) => [s.name, s.dept, s.date]));
+      openExportPicker(e.title + '_报名名单_' + today(), ['姓名', '部门', '报名时间'], e.signups.map((s) => [s.name, s.dept, s.date]));
       commit('导出报名名单', e.title);
     };
   });
