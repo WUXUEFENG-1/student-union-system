@@ -64,10 +64,29 @@ let db = load();
 let cur = null;
 
 /* ---------------- 数据 ---------------- */
+/* 职务 → 登录角色自动映射：主席/副主席=主席团，部长/副部长=部长团，其余=普通学生 */
+function roleFromTitle(title) {
+  if (['主席', '副主席'].includes(title)) return 'presidium';
+  if (['部长', '副部长'].includes(title)) return 'minister';
+  return 'student';
+}
+function matchMember(db, acc) {
+  return (db.members || []).find((m) => m.account === acc.username)
+    || (db.members || []).find((m) => m.name === acc.name && (m.sno === acc.sno || acc.sno === '—' || m.sno === '—'))
+    || (db.members || []).find((m) => m.sno === acc.sno && acc.sno !== '—');
+}
 function normalize(db) {
   (db.accounts || []).forEach((a) => {
     a.gender = a.gender || ''; a.ethnicity = a.ethnicity || '汉族'; a.politics = a.politics || '';
     a.account = a.account || a.username;
+    const mem = matchMember(db, a);
+    if (mem) {
+      mem.account = mem.account || a.username;
+      if (mem.title) a.title = mem.title;
+      if (mem.dept) a.dept = mem.dept;
+      ['gender', 'ethnicity', 'politics', 'class', 'phone', 'sno'].forEach((k) => { if (mem[k] && mem[k] !== '—') a[k] = mem[k]; });
+    }
+    if (a.role !== 'admin') a.role = roleFromTitle(a.title);
   });
   (db.members || []).forEach((m) => {
     m.gender = m.gender || ''; m.ethnicity = m.ethnicity || '汉族'; m.politics = m.politics || '';
@@ -282,15 +301,30 @@ function doLogin() {
 
 function enterApp(acc) {
   cur = Object.assign({}, acc);
+  /* 同步成员档案（不含密码），并按职务校正登录身份 */
+  const mem = matchMember(db, acc);
+  if (mem) {
+    ['name', 'gender', 'ethnicity', 'politics', 'class', 'phone', 'dept', 'title', 'sno'].forEach((k) => {
+      if (mem[k] != null && mem[k] !== '' && mem[k] !== '—') cur[k] = mem[k];
+    });
+  }
+  if (cur.role !== 'admin') cur.role = roleFromTitle(cur.title);
+  /* 把校正后的身份与档案回写账号记录，保证菜单、工作台一致 */
+  const rec = db.accounts.find((a) => a.username === acc.username);
+  if (rec) Object.assign(rec, {
+    role: cur.role, name: cur.name, dept: cur.dept, title: cur.title, sno: cur.sno,
+    class: cur.class, phone: cur.phone, gender: cur.gender, ethnicity: cur.ethnicity, politics: cur.politics
+  });
+
   $('#loginPage').classList.add('hidden');
   $('#shell').classList.remove('hidden');
-  $('#userName').textContent = acc.name;
-  $('#userTitle').textContent = acc.title + (acc.dept && acc.dept !== '未加入' ? ' · ' + acc.dept : '');
-  $('#userAvatar').textContent = acc.name.slice(-1);
-  $('#roleBadge').textContent = ROLE_NAMES[acc.role];
+  $('#userName').textContent = cur.name;
+  $('#userTitle').textContent = cur.title + (cur.dept && cur.dept !== '未加入' ? ' · ' + cur.dept : '');
+  $('#userAvatar').textContent = cur.name.slice(-1);
+  $('#roleBadge').textContent = ROLE_NAMES[cur.role];
   document.title = SYSTEM.full;
 
-  $('#nav').innerHTML = MENU[acc.role].map(([key, label], i) => `
+  $('#nav').innerHTML = MENU[cur.role].map(([key, label], i) => `
     <button class="nav-item${i === 0 ? ' active' : ''}" data-view="${key}">
       <svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[key]}</svg>${label}</button>`).join('');
   document.querySelectorAll('.nav-item').forEach((b) => {
@@ -299,7 +333,7 @@ function enterApp(acc) {
       switchView(b.dataset.view);
     };
   });
-  switchView(MENU[acc.role][0][0]);
+  switchView(MENU[cur.role][0][0]);
 }
 
 $('#loginBtn').onclick = doLogin;
