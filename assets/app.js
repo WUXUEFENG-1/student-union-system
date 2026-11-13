@@ -8,6 +8,7 @@ const ICONS = {
   logs: '<path d="M5 5h14M5 10h14M5 15h9M5 20h9"/><circle cx="18" cy="15" r="2.2"/>',
   activity: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5M8 14h3"/>',
   personnel: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M17.5 11.5v6M14.5 14.5h6"/>',
+  accounts: '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.4"/>',
   dept: '<path d="M4 21V6l8-3 8 3v15M4 21h16M9 21v-5h6v5M9 9h2M13 9h2M9 12h2M13 12h2"/>',
   assess: '<path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/>',
   notice: '<path d="M4 10.5v3a2 2 0 0 0 2 2h2l5 4V4.5L8 8.5H6a2 2 0 0 0-2 2z"/><path d="M17 8.5a5 5 0 0 1 0 7"/>',
@@ -23,7 +24,7 @@ const ICONS = {
 const MENU = {
   admin: [
     ['dashboard', '工作台'], ['monitor', '系统监测'], ['logs', '操作日志'], ['activity', '活动审批'],
-    ['personnel', '人事管理'], ['dept', '部门审核'], ['assess', '考核管理'], ['notice', '通知管理'],
+    ['personnel', '人事管理'], ['accounts', '账号管理'], ['dept', '部门审核'], ['assess', '考核管理'], ['notice', '通知管理'],
     ['leave', '请假审批'], ['join', '加入申请'], ['collect', '信息收集'], ['event', '活动报名'], ['profile', '个人信息']
   ],
   presidium: [
@@ -48,6 +49,7 @@ const PAGE_META = {
   logs: ['操作日志', '账号关键操作留痕，可导出与检索'],
   activity: ['活动与审批', '活动申请、部长/副部长审批、撤回全流程'],
   personnel: ['人事管理', '成员信息、批量导入与任免记录'],
+  accounts: ['账号管理', '管理员导入登录账号、重置密码与移除账号'],
   dept: ['部门管理', '部门信息与成员同步'],
   assess: ['考核管理', '按层级开展任务完成度考核'],
   notice: ['通知公告', '通知的发布与撤回'],
@@ -62,17 +64,28 @@ let db = load();
 let cur = null;
 
 /* ---------------- 数据 ---------------- */
+function normalize(db) {
+  (db.accounts || []).forEach((a) => {
+    a.gender = a.gender || ''; a.ethnicity = a.ethnicity || '汉族'; a.politics = a.politics || '';
+    a.account = a.account || a.username;
+  });
+  (db.members || []).forEach((m) => {
+    m.gender = m.gender || ''; m.ethnicity = m.ethnicity || '汉族'; m.politics = m.politics || '';
+    if (!m.account) { const acc = db.accounts.find((a) => a.name === m.name && (a.sno === m.sno || a.sno === '—')); if (acc) m.account = acc.username; }
+  });
+  return db;
+}
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      if (data && data.members && data.accounts) return data;
+      if (data && data.members && data.accounts) return normalize(data);
     }
   } catch (e) { /* 损坏则重建 */ }
   const fresh = JSON.parse(JSON.stringify(SEED));
   localStorage.setItem(STORE_KEY, JSON.stringify(fresh));
-  return fresh;
+  return normalize(fresh);
 }
 function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
 function uid(p) { return p + Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 4); }
@@ -323,7 +336,7 @@ function switchView(view) {
 }
 function render() {
   const map = {
-    dashboard: renderDashboard, activity: renderActivity, personnel: renderPersonnel, dept: renderDept,
+    dashboard: renderDashboard, activity: renderActivity, personnel: renderPersonnel, accounts: renderAccounts, dept: renderDept,
     assess: renderAssess, notice: renderNotice, leave: renderLeave, join: renderJoin,
     attendance: renderAttendance, asset: renderAsset, profile: renderProfile,
     collect: renderCollect, event: renderEvent, monitor: renderMonitor, logs: renderLogs
