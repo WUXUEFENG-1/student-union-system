@@ -106,7 +106,8 @@ function canRemove(member) {
 }
 
 function renderPersonnel() {
-  const list = db.members.filter((m) => m.status === '在任');
+  let list = db.members.filter((m) => m.status === '在任');
+  if (cur.role === 'minister') list = list.filter((m) => m.dept === cur.dept);
   const canManage = allPower();
   $('#views').innerHTML = `
     <div class="card">
@@ -212,18 +213,19 @@ function renderPersonnel() {
         { key: 'sno', label: '学号', required: true },
         { key: 'class', label: '班级' },
         { key: 'phone', label: '联系电话' },
-        { key: 'dept', label: '部门', type: 'select', options: DEPTS },
+        { key: 'dept', label: '部门', placeholder: '如：宣传部 / 外联部' },
         { key: 'title', label: '职务', type: 'select', options: TITLES },
         { key: 'account', label: '登录账号' },
         { key: 'password', label: '初始密码' }
       ],
       values: { gender: '男', ethnicity: '汉族', politics: '共青团员', dept: cur.role === 'minister' ? cur.dept : DEPTS[0], title: '成员' },
       onSubmit(d) {
-        db.members.push({ id: uid('m'), name: d.name, sno: d.sno, class: d.class || '—', dept: d.dept, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.account || '', status: '在任', joined: today() });
+        const deptName = d.dept || '未加入';
+        db.members.push({ id: uid('m'), name: d.name, sno: d.sno, class: d.class || '—', dept: deptName, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.account || '', status: '在任', joined: today() });
         if (d.account) {
           if (db.accounts.some((a) => a.username === d.account)) { toast('账号已存在，未创建登录账号'); }
           else if (!d.password || d.password.length < 6) { toast('初始密码不足 6 位，未创建登录账号'); }
-          else db.accounts.push({ username: d.account, password: d.password, name: d.name, role: 'student', dept: d.dept, title: d.title, sno: d.sno, class: d.class || '—', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
+          else db.accounts.push({ username: d.account, password: d.password, name: d.name, role: roleFromTitle(d.title), dept: deptName, title: d.title, sno: d.sno, class: d.class || '—', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
         }
         commit('新增成员', `${d.name} · ${d.dept} · ${d.title}`); render(); toast('成员已添加');
       }
@@ -243,6 +245,11 @@ function renderPersonnel() {
         onSubmit(d) {
           db.personnel.push({ id: uid('p'), name: m.name, action: '提升', from: m.title, to: d.title, operator: cur.name, date: today() });
           m.title = d.title; m.dept = d.dept;
+          const acc = db.accounts.find((a) => a.username === m.account);
+          if (acc) {
+            acc.title = d.title; acc.dept = d.dept;
+            if (acc.role !== 'admin') acc.role = roleFromTitle(d.title);
+          }
           commit('职务调整', `${m.name}：${m.title} → ${d.title}`); render(); toast('职务已调整');
         }
       });
@@ -284,8 +291,7 @@ function importMembers(text) {
     const [name, gender, ethnicity, politics, cls, phone, dept, sno, account, password] = splitRow(line);
     if (!name || !sno) { skipped++; messages.push(`第 ${idx + 1} 行缺少姓名或学号，已跳过`); return; }
     if (db.members.some((m) => m.sno === sno && m.name === name)) { skipped++; messages.push(`第 ${idx + 1} 行「${name}」已存在，已跳过`); return; }
-    let deptName = dept || DEPTS[0];
-    if (!DEPTS.includes(deptName)) { skipped++; messages.push(`第 ${idx + 1} 行部门「${deptName}」不在五个标准部门内，已跳过`); return; }
+    const deptName = dept || '未加入';
     db.members.push({ id: uid('m'), name, sno, class: cls || '—', dept: deptName, title: '成员', phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', account: account || '', status: '在任', joined: today() });
     if (account) {
       if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未创建登录账号`); }
@@ -314,6 +320,7 @@ function deptSummary(name) {
 }
 
 function showDeptMembers(name) {
+  if (cur.role === 'minister' && name !== cur.dept) { toast('部长/副部长仅可查看本部门成员'); return; }
   const list = deptMembers(name);
   const rows = list.map((m) => `<tr><td>${esc(m.name)}</td><td>${esc(m.sno)}</td><td>${esc(m.class)}</td><td>${esc(m.title)}</td><td>${esc(m.phone || '—')}</td></tr>`).join('');
   openInfo(name + ' · 成员信息', `<div class="table-wrap"><table>
@@ -346,6 +353,7 @@ function renderDept() {
         <button class="link-btn" data-dept-members="${esc(d.name)}">查看成员</button>
         ${canEdit && (!myDeptOnly || d.name === cur.dept) ? `<button class="link-btn" data-edit-dept="${d.id}">编辑</button>` : ''}
         ${cur.role === 'presidium' ? `<button class="link-btn del" data-dissolve="${d.id}">申请罢免</button>` : ''}
+        ${allPower() ? `<button class="link-btn del" data-dept-del="${d.id}">删除</button>` : ''}
       </div></td></tr>`;
   }).join('')}</tbody>
       </table></div>
@@ -428,6 +436,25 @@ function renderDept() {
           commit('提交部门罢免', d.name); render(); toast('罢免申请已提交管理员审核');
         }
       });
+    };
+  });
+
+  document.querySelectorAll('[data-dept-del]').forEach((b) => {
+    b.onclick = () => {
+      const d = db.departments.find((x) => x.id === b.dataset.deptDel);
+      const cnt = deptMembers(d.name).length;
+      if (!confirm(`确定删除部门「${d.name}」？${cnt ? `该部门现有 ${cnt} 名在任成员，删除后将归入未加入。` : ''}此操作不可恢复。`)) return;
+      db.members.forEach((m) => {
+        if (m.dept === d.name) {
+          m.dept = '未加入';
+          if (['主席', '副主席', '部长', '副部长'].includes(m.title)) m.title = '成员';
+          const acc = db.accounts.find((a) => a.username === m.account);
+          if (acc) { acc.dept = '未加入'; acc.title = '成员'; if (acc.role !== 'admin') acc.role = roleFromTitle('成员'); }
+        }
+      });
+      db.departments = db.departments.filter((x) => x.id !== d.id);
+      db.deptRequests = db.deptRequests.filter((r) => r.dept !== d.name);
+      commit('删除部门', d.name); save(); render(); toast('部门已删除');
     };
   });
 
@@ -518,18 +545,19 @@ function renderAssess() {
 
 /* ---------------- 通知 ---------------- */
 function renderNotice() {
+  const list = db.notices.filter((n) => n.status === '已发布').slice().reverse();
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>通知公告</h2><div class="sub">共 ${db.notices.length} 条，已发布 ${db.notices.filter((n) => n.status === '已发布').length} 条</div></div>
+        <div><h2>通知公告</h2><div class="sub">共 ${list.length} 条已发布公告，已撤回的通知不再显示</div></div>
         ${isPublisher() ? '<button class="primary-btn" id="addNotice">+ 发布通知</button>' : ''}
       </div>
-      <div class="notice-list">${db.notices.slice().reverse().map((n) => `
-        <div class="notice-item${n.status === '已撤回' ? ' muted' : ''}">
+      <div class="notice-list">${list.map((n) => `
+        <div class="notice-item">
           <h4><span class="badge blue">${esc(n.type)}</span>${esc(n.title)}</h4>
           <p>${esc(n.content)}</p>
           <div class="notice-meta" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-            <span>${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）${n.status === '已撤回' ? ' · 已撤回' : ''}</span>
+            <span>${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）</span>
             <span class="row-actions">${isPublisher() && n.status === '已发布' ? `<button class="link-btn del" data-notice-withdraw="${n.id}">撤回通知</button>` : ''}</span>
           </div>
         </div>`).join('') || '<div class="empty">暂无通知</div>'}
@@ -799,7 +827,7 @@ function renderAccounts() {
         { key: 'class', label: '所在班级' },
         { key: 'phone', label: '联系电话' },
         { key: 'role', label: '角色', type: 'select', options: ['普通学生', '部长团', '主席团', '管理员'] },
-        { key: 'dept', label: '部门', type: 'select', options: ['未加入'].concat(DEPTS) },
+        { key: 'dept', label: '部门', placeholder: '未加入 或部门名称' },
         { key: 'title', label: '职务', type: 'select', options: TITLES }
       ],
       values: { gender: '男', ethnicity: '汉族', politics: '共青团员', role: '普通学生', dept: '未加入', title: '成员' },
@@ -807,9 +835,10 @@ function renderAccounts() {
         if (d.password.length < 6) { toast('初始密码至少 6 位'); return; }
         if (db.accounts.some((a) => a.username === d.username)) { toast('用户名已存在'); return; }
         const role = ROLE_KEY_FROM_LABEL[d.role];
-        db.accounts.push({ username: d.username, password: d.password, name: d.name, role, dept: d.dept, title: d.title, sno: d.sno || '', class: d.class || '', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
-        if (d.dept !== '未加入' && !db.members.some((m) => m.name === d.name && m.sno === d.sno)) {
-          db.members.push({ id: uid('m'), name: d.name, sno: d.sno || '—', class: d.class || '—', dept: d.dept, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.username, status: '在任', joined: today() });
+        const deptName = d.dept || '未加入';
+        db.accounts.push({ username: d.username, password: d.password, name: d.name, role, dept: deptName, title: d.title, sno: d.sno || '', class: d.class || '', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
+        if (deptName !== '未加入' && !db.members.some((m) => m.name === d.name && m.sno === d.sno)) {
+          db.members.push({ id: uid('m'), name: d.name, sno: d.sno || '—', class: d.class || '—', dept: deptName, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.username, status: '在任', joined: today() });
         }
         commit('新增账号', `${d.username} · ${d.name}`); render(); toast('账号已添加');
       }
@@ -855,10 +884,9 @@ function importAccounts(text) {
     if (!username || !password || !name) { skipped++; messages.push(`第 ${idx + 1} 行缺少账号、初始密码或姓名，已跳过`); return; }
     if (password.length < 6) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」初始密码不足 6 位，已跳过`); return; }
     if (db.accounts.some((a) => a.username === username)) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」账号已存在，已跳过`); return; }
-    const role = ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || 'student';
     const deptName = dept || '未加入';
-    if (deptName !== '未加入' && !DEPTS.includes(deptName)) { skipped++; messages.push(`第 ${idx + 1} 行部门「${deptName}」不在五个标准部门内，已跳过`); return; }
     const titleName = TITLES.includes(titleLabel) ? titleLabel : '成员';
+    const role = ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || roleFromTitle(titleName);
     const profile = { name, gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', class: cls || '—', phone: phone || '', dept: deptName, sno: sno || '—' };
     db.accounts.push({ username, password, name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
     let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
