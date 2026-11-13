@@ -17,12 +17,12 @@ const DEPTS = ['主席团', '秘书部', '宣传部', '实践部', '权益服务
 const TITLES = ['主席', '副主席', '部长', '副部长', '成员'];
 
 const ACCOUNTS = [
-  { username: 'admin', password: '123456', name: '系统管理员', role: 'admin', dept: '系统', title: '管理员', sno: '—', class: '—', phone: '' },
-  { username: 'president', password: '123456', name: '吴雪枫', role: 'presidium', dept: '主席团', title: '主席', sno: '20240001', class: '2024级计算机网络技术2班', phone: '138****6621' },
-  { username: 'vice', password: '123456', name: '李思远', role: 'presidium', dept: '主席团', title: '副主席', sno: '20240012', class: '2024级大数据技术1班', phone: '139****3308' },
-  { username: 'minister', password: '123456', name: '陈雨桐', role: 'minister', dept: '宣传部', title: '部长', sno: '20240023', class: '2024级电子商务1班', phone: '137****9915' },
-  { username: 'vminister', password: '123456', name: '王浩然', role: 'minister', dept: '宣传部', title: '副部长', sno: '20240024', class: '2024级电子商务2班', phone: '135****2210' },
-  { username: 'student', password: '123456', name: '林小满', role: 'student', dept: '未加入', title: '学生', sno: '20260035', class: '2026级经济管理1班', phone: '138****3321' }
+  { username: 'admin', password: '123456', name: '系统管理员', role: 'admin', dept: '系统', title: '管理员', sno: '—', class: '—', phone: '', gender: '—', ethnicity: '汉族', politics: '系统' },
+  { username: 'president', password: '123456', name: '吴雪枫', role: 'presidium', dept: '主席团', title: '主席', sno: '20240001', class: '2024级计算机网络技术2班', phone: '138****6621', gender: '男', ethnicity: '汉族', politics: '中共预备党员' },
+  { username: 'vice', password: '123456', name: '李思远', role: 'presidium', dept: '主席团', title: '副主席', sno: '20240012', class: '2024级大数据技术1班', phone: '139****3308', gender: '男', ethnicity: '汉族', politics: '共青团员' },
+  { username: 'minister', password: '123456', name: '陈雨桐', role: 'minister', dept: '宣传部', title: '部长', sno: '20240023', class: '2024级电子商务1班', phone: '137****9915', gender: '女', ethnicity: '汉族', politics: '共青团员' },
+  { username: 'vminister', password: '123456', name: '王浩然', role: 'minister', dept: '宣传部', title: '副部长', sno: '20240024', class: '2024级电子商务2班', phone: '135****2210', gender: '男', ethnicity: '汉族', politics: '共青团员' },
+  { username: 'student', password: '123456', name: '林小满', role: 'student', dept: '未加入', title: '学生', sno: '20260035', class: '2026级经济管理1班', phone: '138****3321', gender: '女', ethnicity: '汉族', politics: '共青团员' }
 ];
 
 const SEED = {
@@ -30,17 +30,17 @@ const SEED = {
 
   /* ④ 人员信息表 */
   members: [
-    { id: 'm1', name: '吴雪枫', sno: '20240001', class: '2024级计算机网络技术2班', dept: '主席团', title: '主席', phone: '138****6621', status: '在任', joined: '2026-09-01' },
-    { id: 'm2', name: '李思远', sno: '20240012', class: '2024级大数据技术1班', dept: '主席团', title: '副主席', phone: '139****3308', status: '在任', joined: '2026-09-01' },
-    { id: 'm3', name: '孙嘉禾', sno: '20240045', class: '2024级市场营销2班', dept: '秘书部', title: '部长', phone: '188****7610', status: '在任', joined: '2026-09-03' },
-    { id: 'm4', name: '陈雨桐', sno: '20240023', class: '2024级电子商务1班', dept: '宣传部', title: '部长', phone: '137****9915', status: '在任', joined: '2026-09-03' },
-    { id: 'm5', name: '王浩然', sno: '20240024', class: '2024级电子商务2班', dept: '宣传部', title: '副部长', phone: '135****2210', status: '在任', joined: '2026-09-03' },
-    { id: 'm6', name: '黄婉清', sno: '20240067', class: '2024级连锁经营管理1班', dept: '实践部', title: '部长', phone: '176****0192', status: '在任', joined: '2026-09-08' },
-    { id: 'm7', name: '赵一鸣', sno: '20240034', class: '2024级会计1班', dept: '权益服务部', title: '部长', phone: '150****2244', status: '在任', joined: '2026-09-05' },
-    { id: 'm8', name: '杨梦洁', sno: '20250052', class: '2025级文秘1班', dept: '宣传部', title: '成员', phone: '156****1102', status: '在任', joined: '2026-09-20' },
-    { id: 'm9', name: '马晨阳', sno: '20250041', class: '2025级电子商务2班', dept: '实践部', title: '成员', phone: '152****8877', status: '在任', joined: '2026-09-15' },
-    { id: 'm10', name: '刘思彤', sno: '20250063', class: '2025级会计2班', dept: '权益服务部', title: '成员', phone: '189****0921', status: '在任', joined: '2026-09-20' },
-    { id: 'm11', name: '何佳颖', sno: '20250033', class: '2025级市场营销1班', dept: '宣传部', title: '成员', phone: '187****3344', status: '在任', joined: '2026-09-15' }
+    { id: 'm1', name: '吴雪枫', sno: '20240001', class: '2024级计算机网络技术2班', dept: '主席团', title: '主席', phone: '138****6621', gender: '男', ethnicity: '汉族', politics: '中共预备党员', status: '在任', joined: '2026-09-01' },
+    { id: 'm2', name: '李思远', sno: '20240012', class: '2024级大数据技术1班', dept: '主席团', title: '副主席', phone: '139****3308', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-01' },
+    { id: 'm3', name: '孙嘉禾', sno: '20240045', class: '2024级市场营销2班', dept: '秘书部', title: '部长', phone: '188****7610', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
+    { id: 'm4', name: '陈雨桐', sno: '20240023', class: '2024级电子商务1班', dept: '宣传部', title: '部长', phone: '137****9915', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
+    { id: 'm5', name: '王浩然', sno: '20240024', class: '2024级电子商务2班', dept: '宣传部', title: '副部长', phone: '135****2210', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
+    { id: 'm6', name: '黄婉清', sno: '20240067', class: '2024级连锁经营管理1班', dept: '实践部', title: '部长', phone: '176****0192', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-08' },
+    { id: 'm7', name: '赵一鸣', sno: '20240034', class: '2024级会计1班', dept: '权益服务部', title: '部长', phone: '150****2244', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-05' },
+    { id: 'm8', name: '杨梦洁', sno: '20250052', class: '2025级文秘1班', dept: '宣传部', title: '成员', phone: '156****1102', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-20' },
+    { id: 'm9', name: '马晨阳', sno: '20250041', class: '2025级电子商务2班', dept: '实践部', title: '成员', phone: '152****8877', gender: '男', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-15' },
+    { id: 'm10', name: '刘思彤', sno: '20250063', class: '2025级会计2班', dept: '权益服务部', title: '成员', phone: '189****0921', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-20' },
+    { id: 'm11', name: '何佳颖', sno: '20250033', class: '2025级市场营销1班', dept: '宣传部', title: '成员', phone: '187****3344', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-15' }
   ],
 
   /* ① 部门信息表 */
