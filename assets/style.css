@@ -42,27 +42,11 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 26px 70px rgba(4, 20, 40, .38);
 }
 .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-.login-brand .logo {
-  width: 44px; height: 44px; border-radius: 12px; flex: 0 0 44px;
-  background: linear-gradient(140deg, var(--blue-600), var(--blue-500));
-  color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 19px;
-}
 .login-brand strong { display: block; font-size: 15px; color: var(--blue-900); }
 .login-brand span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 3px; }
 .login-card h1 { font-size: 19px; color: var(--blue-900); }
-.login-sub { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 6px 0 18px; }
 .login-err { font-size: 12px; color: var(--danger); margin-top: 10px; }
 .primary-btn.block { width: 100%; padding: 11px 16px; margin-top: 6px; font-size: 14px; }
-.demo-block { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line); }
-.demo-title { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
-.demo-accounts { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  border: 1px solid var(--line); background: var(--blue-50);
-  border-radius: 9px; padding: 7px 11px; font-size: 12px; color: var(--blue-700);
-  display: flex; flex-direction: column; gap: 2px; text-align: left;
-}
-.chip span { font-size: 10.5px; color: var(--muted); }
-.chip:hover { border-color: var(--blue-500); background: #fff; }
 
 /* ================= 主框架 ================= */
 .app { display: flex; min-height: 100vh; }
@@ -74,11 +58,6 @@ button { font-family: inherit; cursor: pointer; }
   padding: 22px 16px; position: sticky; top: 0; height: 100vh;
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 0 6px 20px; }
-.logo {
-  width: 38px; height: 38px; border-radius: 10px;
-  background: #fff; color: var(--blue-700);
-  display: grid; place-items: center; font-weight: 700; font-size: 18px;
-}
 .brand-text { display: flex; flex-direction: column; gap: 2px; }
 .brand-text strong { font-size: 13px; letter-spacing: .5px; }
 .brand-text span { font-size: 11px; color: #a9c3e0; }
@@ -174,11 +153,6 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ================= 工具条与按钮 ================= */
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.search {
-  flex: 1; min-width: 160px; border: 1px solid var(--line); border-radius: 9px;
-  padding: 9px 12px; font-size: 13px; color: var(--text); background: var(--blue-50); outline: none;
-}
-.search:focus { border-color: var(--blue-500); background: #fff; }
 select.filter {
   border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px;
   font-size: 13px; background: #fff; color: var(--text); outline: none;
@@ -296,6 +270,32 @@ tr:hover td { background: #fafcff; }
   background: var(--blue-900); color: #fff; font-size: 13px;
   padding: 11px 20px; border-radius: 24px; z-index: 80;
   box-shadow: 0 10px 26px rgba(11,37,69,.3);
+}
+
+/* ================= 校徽 ================= */
+.logo-badge {
+  width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px;
+  background: #fff url('data:image/png;base64,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') center/cover no-repeat;
+  border: 1px solid var(--line);
+}
+.logo-badge.big { width: 54px; height: 54px; flex: 0 0 54px; }
+
+/* ================= 收集 / 报名卡片 ================= */
+.collect-card { padding: 16px 18px; }
+.collect-meta {
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+  font-size: 12px; color: var(--muted); margin-top: 6px;
+}
+.collect-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ================= 文件导入 ================= */
+.file-input {
+  border: 1px dashed var(--line); border-radius: 8px;
+  padding: 9px 10px; font-size: 12.5px; color: var(--muted); background: var(--blue-50);
+}
+.file-input::file-selector-button {
+  border: 0; border-radius: 6px; background: var(--blue-100); color: var(--blue-600);
+  padding: 6px 10px; font-size: 12px; margin-right: 10px; cursor: pointer;
 }
 
 /* ================= 响应式 ================= */
