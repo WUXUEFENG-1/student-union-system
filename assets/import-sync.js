@@ -78,3 +78,23 @@ importAccounts = function (text) {
   });
   return { added, updated, skipped, messages };
 };
+
+/* 职务调整弹窗：把被写死的部门下拉替换为可自由填写的输入框，支持任意部门名称 */
+const _openFormSync = openForm;
+openForm = function (opts) {
+  const body = _openFormSync(opts);
+  try {
+    if (opts && /职务调整/.test(opts.title || '')) {
+      const sel = body && body.querySelector ? body.querySelector('#f_dept') : null;
+      if (sel && sel.tagName === 'SELECT') {
+        const input = document.createElement('input');
+        input.id = 'f_dept';
+        input.type = 'text';
+        input.placeholder = '如：主席团 / 文体部 / 外联部';
+        input.value = sel.value || '';
+        sel.parentNode.replaceChild(input, sel);
+      }
+    }
+  } catch (e) { /* 忽略兼容异常 */ }
+  return body;
+};
