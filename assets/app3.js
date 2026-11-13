@@ -343,18 +343,27 @@ const PERMISSIONS = {
 };
 
 function renderProfile() {
+  /* 以成员档案为准展示资料（账号为登录标识，密码不展示、不同步） */
+  const mem = db.members.find((m) => m.account === cur.username)
+    || db.members.find((m) => m.name === cur.name && (m.sno === cur.sno || m.sno === '—'));
+  const P = mem || cur;
+  const field = (v) => (v == null || v === '' || v === '—') ? '—' : v;
   $('#views').innerHTML = `
     <div class="grid-2">
       <div class="card">
-        <div class="card-head"><div><h2>个人信息</h2><div class="sub">资料仅保存在本机浏览器，可随时修改</div></div></div>
+        <div class="card-head"><div><h2>个人信息</h2><div class="sub">资料与管理员导入的成员档案同步，账号与密码不在此展示</div></div></div>
         <div class="info-list">
-          <div><span>姓名</span><strong>${esc(cur.name)}</strong></div>
+          <div><span>姓名</span><strong>${esc(field(P.name))}</strong></div>
           <div><span>账号</span><strong>${esc(cur.username)}</strong></div>
           <div><span>角色</span><strong>${esc(ROLE_NAMES[cur.role])}</strong></div>
-          <div><span>部门</span><strong>${esc(cur.dept)}</strong></div>
-          <div><span>职务</span><strong>${esc(cur.title)}</strong></div>
-          <div><span>学号</span><strong>${esc(cur.sno || '—')}</strong></div>
-          <div><span>班级</span><strong>${esc(cur.class || '—')}</strong></div>
+          <div><span>性别</span><strong>${esc(field(P.gender))}</strong></div>
+          <div><span>族别</span><strong>${esc(field(P.ethnicity))}</strong></div>
+          <div><span>政治面貌</span><strong>${esc(field(P.politics))}</strong></div>
+          <div><span>部门</span><strong>${esc(field(P.dept))}</strong></div>
+          <div><span>职务</span><strong>${esc(field(P.title))}</strong></div>
+          <div><span>学号</span><strong>${esc(field(P.sno))}</strong></div>
+          <div><span>班级</span><strong>${esc(field(P.class))}</strong></div>
+          <div><span>联系电话</span><strong>${esc(field(P.phone))}</strong></div>
         </div>
         <div class="row-actions" style="margin-top:16px">
           <button class="primary-btn" id="editSelf">修改资料</button>
@@ -372,16 +381,21 @@ function renderProfile() {
       title: '修改个人资料',
       fields: [
         { key: 'name', label: '姓名', required: true },
+        { key: 'gender', label: '性别', type: 'select', options: ['男', '女'] },
+        { key: 'ethnicity', label: '族别' },
+        { key: 'politics', label: '政治面貌', type: 'select', options: ['群众', '共青团员', '中共预备党员', '中共党员'] },
         { key: 'class', label: '班级' },
-        { key: 'phone', label: '联系方式' }
+        { key: 'phone', label: '联系电话' }
       ],
-      values: { name: cur.name, class: cur.class || '', phone: cur.phone || '' },
+      values: { name: P.name, gender: P.gender || '男', ethnicity: P.ethnicity || '汉族', politics: P.politics || '共青团员', class: P.class || '', phone: P.phone || '' },
       onSubmit(d) {
         const acc = db.accounts.find((a) => a.username === cur.username);
-        const mem = db.members.find((m) => m.name === cur.name && m.sno === cur.sno);
-        if (acc) Object.assign(acc, { name: d.name, class: d.class });
-        if (mem) Object.assign(mem, { name: d.name, class: d.class, phone: d.phone });
-        Object.assign(cur, { name: d.name, class: d.class });
+        const m2 = db.members.find((m) => m.account === cur.username)
+          || db.members.find((m) => m.name === cur.name && (m.sno === cur.sno || m.sno === '—'));
+        const patch = { name: d.name, gender: d.gender, ethnicity: d.ethnicity, politics: d.politics, class: d.class, phone: d.phone };
+        if (acc) Object.assign(acc, patch);
+        if (m2) Object.assign(m2, patch);
+        Object.assign(cur, patch);
         $('#userName').textContent = d.name;
         $('#userAvatar').textContent = d.name.slice(-1);
         commit('修改个人资料', d.name); save(); render(); toast('资料已更新');
