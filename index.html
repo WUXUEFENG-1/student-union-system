@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>学生会信息管理系统 | 应用经济学院</title>
+<title>云南工业信息职业学院应用经济学系学生会管理系统</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231657a6'/%3E%3Ctext x='16' y='21' font-size='15' fill='white' text-anchor='middle' font-family='sans-serif'%3E%E5%AD%A6%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -12,15 +13,13 @@
 <div class="login-page" id="loginPage">
   <div class="login-card">
     <div class="login-brand">
-      <div class="logo">学</div>
+      <div class="logo-badge big"></div>
       <div>
-        <strong>学生会信息管理系统</strong>
-        <span>应用经济学院 · 办公与审批平台</span>
+        <strong>应用经济学系学生会管理系统</strong>
+        <span>云南工业信息职业学院</span>
       </div>
     </div>
     <h1>账号登录</h1>
-    <p class="login-sub">登录后按角色开放对应权限：指导老师 / 主席团 / 部长团 / 干事 / 普通学生</p>
-
     <div class="field">
       <label>账号</label>
       <input id="loginUser" autocomplete="username" placeholder="请输入账号">
@@ -31,11 +30,6 @@
     </div>
     <p class="login-err hidden" id="loginErr"></p>
     <button class="primary-btn block" id="loginBtn">登 录</button>
-
-    <div class="demo-block">
-      <div class="demo-title">演示账号（点击自动填充）</div>
-      <div class="demo-accounts" id="demoAccounts"></div>
-    </div>
   </div>
 </div>
 
@@ -43,10 +37,10 @@
 <div class="app hidden" id="shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">学</div>
+      <div class="logo-badge"></div>
       <div class="brand-text">
-        <strong>学生会信息管理系统</strong>
-        <span>应用经济学院</span>
+        <strong>应用经济学系学生会管理系统</strong>
+        <span>云南工业信息职业学院</span>
       </div>
     </div>
     <nav class="nav" id="nav"></nav>
@@ -55,7 +49,7 @@
         <span class="mini-avatar" id="userAvatar">吴</span>
         <div>
           <strong id="userName">吴雪枫</strong>
-          <span id="userTitle">主席 · 秘书处</span>
+          <span id="userTitle">主席 · 主席团</span>
         </div>
       </div>
       <button class="ghost-btn" id="logoutBtn">退出登录</button>
