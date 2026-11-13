@@ -29,6 +29,7 @@
       <input id="loginPass" type="password" autocomplete="current-password" placeholder="请输入密码">
     </div>
     <p class="login-err hidden" id="loginErr"></p>
+    <p id="cloudStatus" style="margin:6px 0;font-size:13px;text-align:center;">正在连接云端…</p>
     <button class="primary-btn block" id="loginBtn">登 录</button>
   </div>
 </div>
@@ -89,11 +90,13 @@
 </div>
 
 <div class="toast hidden" id="toast"></div>
+
 <script src="assets/xlsx-reader.js"></script>
 <script src="assets/data.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/app2.js"></script>
 <script src="assets/app3.js"></script>
 <script src="assets/import-sync.js"></script>
+<script src="assets/cloud-sync.js"></script>
 </body>
 </html>
