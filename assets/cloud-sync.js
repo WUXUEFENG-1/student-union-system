@@ -51,6 +51,35 @@
     }).catch(function () { status('云端离线 · 仅本地数据', false); });
   }
 
+  function unionById(localList, remoteList) {
+    const map = new Map((remoteList || []).map(function (x) { return [x.id || JSON.stringify(x), x]; }));
+    (localList || []).forEach(function (x) {
+      const id = x.id || JSON.stringify(x);
+      if (!map.has(id)) map.set(id, x);
+    });
+    return Array.from(map.values());
+  }
+
+  /* 首次同步：把本机已有名单与云端合并，避免被云端旧数据覆盖 */
+  function mergeRemote(remoteData) {
+    const base = normalize(JSON.parse(JSON.stringify(remoteData)));
+    const accMap = new Map((base.accounts || []).map(function (a) { return [a.username, a]; }));
+    (db.accounts || []).forEach(function (a) { if (!accMap.has(a.username)) accMap.set(a.username, a); });
+    base.accounts = Array.from(accMap.values());
+
+    const memMap = new Map((base.members || []).map(function (m) { return [m.sno || m.name, m]; }));
+    (db.members || []).forEach(function (m) {
+      const key = m.sno || m.name;
+      if (!memMap.has(key)) memMap.set(key, m);
+    });
+    base.members = Array.from(memMap.values());
+
+    ['notices', 'leaves', 'joinRequests', 'deptRequests', 'collects', 'events', 'activities', 'assets', 'logs', 'departments', 'assessments', 'personnel', 'sessions'].forEach(function (k) {
+      if (Array.isArray(base[k])) base[k] = unionById(db[k], base[k]);
+    });
+    return base;
+  }
+
   function pullRemote() {
     return readRemote().then(function (row) {
       if (!row || !row.data || !row.data.members || !row.data.accounts) {
@@ -61,12 +90,20 @@
       }
       const remoteAt = row.updated_at || '';
       const localAt = db[FLAG] || '';
-      if (!localAt || remoteAt > localAt) {
-        const merged = normalize(row.data);
-        Object.keys(db).forEach(function (k) { delete db[k]; });
-        Object.assign(db, merged, { [FLAG]: remoteAt || iso() });
-        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+      let merged;
+      if (!localAt) {
+        merged = mergeRemote(row.data);
+      } else if (remoteAt > localAt) {
+        merged = normalize(row.data);
+      } else {
+        status('云端已连接 · 名单实时同步', true);
+        return;
       }
+      Object.keys(db).forEach(function (k) { delete db[k]; });
+      Object.assign(db, merged, { [FLAG]: remoteAt || iso() });
+      localStorage.setItem(STORE_KEY, JSON.stringify(db));
+      /* 合并后把更全的本机名单回写云端 */
+      pushLocal();
       status('云端已连接 · 名单实时同步', true);
     }).catch(function () { status('云端离线 · 仅本机数据可用', false); });
   }
