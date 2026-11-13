@@ -141,7 +141,7 @@ function renderPersonnel() {
     </div>`;
 
   $('#exportMembers').onclick = () => {
-    exportCsv('学生会成员信息_' + today(), ['姓名', '学号', '班级', '部门', '职务', '联系方式', '入会时间', '状态'],
+    openExportPicker('学生会成员信息_' + today(), ['姓名', '学号', '班级', '部门', '职务', '联系方式', '入会时间', '状态'],
       db.members.map((m) => [m.name, m.sno, m.class, m.dept, m.title, m.phone, m.joined, m.status]));
   };
 
