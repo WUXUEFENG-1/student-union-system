@@ -107,29 +107,44 @@ function canRemove(member) {
 
 function renderPersonnel() {
   const list = db.members.filter((m) => m.status === '在任');
+  const canManage = allPower();
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>人员信息表</h2><div class="sub">主席、副主席与管理员可任免全部成员；部长/副部长可任免本部门成员</div></div>
+        <div><h2>人员信息表</h2><div class="sub">主席、副主席与管理员可任免、批量删除成员；部长/副部长可任免本部门成员</div></div>
         <div class="toolbar">
           <button class="primary-btn" id="importMembers">一键导入成员</button>
           <button class="primary-btn light" id="addMember">+ 新增成员</button>
+          ${canManage ? '<button class="primary-btn light" id="bulkDeleteMembers">批量删除</button>' : ''}
           <button class="primary-btn light" id="exportMembers">导出成员</button>
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>姓名</th><th>学号</th><th>班级</th><th>部门</th><th>职务</th><th>联系方式</th><th>入会时间</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody>${list.map((m) => `
+        <thead><tr>
+          ${canManage ? '<th><input type="checkbox" id="checkAllMembers"></th>' : ''}
+          <th>序号</th><th>姓名</th><th>性别</th><th>族别</th><th>政治面貌</th><th>所在班级</th><th>联系电话</th><th>部门</th><th>职务</th><th>学号</th><th>账号</th><th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody>${list.map((m, i) => `
           <tr>
+            ${canManage ? `<td><input type="checkbox" class="member-check" data-mid="${m.id}"></td>` : ''}
+            <td>${i + 1}</td>
             <td><div class="name-cell"><span class="mini-avatar">${esc(m.name.slice(-1))}</span>${esc(m.name)}</div></td>
-            <td>${esc(m.sno)}</td><td>${esc(m.class)}</td>
-            <td><span class="badge blue">${esc(m.dept)}</span></td><td>${esc(m.title)}</td>
-            <td>${esc(m.phone || '—')}</td><td>${esc(m.joined)}</td><td>${badge(m.status)}</td>
+            <td>${esc(m.gender || '—')}</td>
+            <td>${esc(m.ethnicity || '—')}</td>
+            <td>${esc(m.politics || '—')}</td>
+            <td>${esc(m.class)}</td>
+            <td>${esc(m.phone || '—')}</td>
+            <td><span class="badge blue">${esc(m.dept)}</span></td>
+            <td>${esc(m.title)}</td>
+            <td>${esc(m.sno)}</td>
+            <td>${esc(m.account || '—')}</td>
+            <td>${badge(m.status)}</td>
             <td><div class="row-actions">
               ${allPower() ? `<button class="link-btn" data-promote="${m.id}">职务调整</button>` : ''}
               ${canRemove(m) ? `<button class="link-btn del" data-remove="${m.id}">罢免</button>` : ''}
             </div></td>
-          </tr>`).join('') || '<tr><td colspan="9" class="empty">暂无成员</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="14" class="empty">暂无成员</td></tr>'}
+        </tbody>
       </table></div>
     </div>
     <div class="card">
@@ -141,16 +156,35 @@ function renderPersonnel() {
     </div>`;
 
   $('#exportMembers').onclick = () => {
-    openExportPicker('学生会成员信息_' + today(), ['姓名', '学号', '班级', '部门', '职务', '联系方式', '入会时间', '状态'],
-      db.members.map((m) => [m.name, m.sno, m.class, m.dept, m.title, m.phone, m.joined, m.status]));
+    const rows = db.members.map((m, i) => [i + 1, m.name, m.gender || '', m.ethnicity || '', m.politics || '', m.class, m.phone || '', m.dept, m.title, m.sno, m.account || '', m.status]);
+    openExportPicker('学生会成员信息_' + today(), ['序号', '姓名', '性别', '族别', '政治面貌', '所在班级', '联系电话', '部门', '职务', '学号', '账号', '状态'], rows);
+  };
+
+  const checkAll = $('#checkAllMembers');
+  if (checkAll) checkAll.onchange = () => {
+    document.querySelectorAll('.member-check').forEach((c) => { c.checked = checkAll.checked; });
+  };
+
+  const bulkBtn = $('#bulkDeleteMembers');
+  if (bulkBtn) bulkBtn.onclick = () => {
+    const ids = [...document.querySelectorAll('.member-check:checked')].map((c) => c.dataset.mid);
+    if (!ids.length) { toast('请先勾选要删除的成员'); return; }
+    const targets = db.members.filter((m) => ids.includes(m.id));
+    const locked = targets.filter((m) => { const acc = db.accounts.find((a) => a.username === m.account); return acc && acc.role === 'admin'; });
+    const removable = targets.filter((m) => !locked.some((x) => x.id === m.id));
+    if (!removable.length) { toast('管理员账号不可删除'); return; }
+    if (!confirm(`确定删除选中的 ${removable.length} 名成员？将同时移除其登录账号，操作不可恢复。`)) return;
+    removable.forEach((m) => { if (m.account) db.accounts = db.accounts.filter((a) => a.username !== m.account); });
+    db.members = db.members.filter((m) => !removable.includes(m));
+    commit('批量删除成员', removable.map((m) => m.name).join('、')); save(); render(); toast(`已删除 ${removable.length} 名成员`);
   };
 
   $('#importMembers').onclick = () => {
     const body = openForm({
       title: '一键导入成员',
       okText: '开始导入',
-      hint: '每行一名成员，按「姓名,学号,班级,部门,职务」排列，逗号或制表符分隔（可直接从 Excel 复制粘贴）。部门不存在会自动创建，职务留空默认成员。',
-      fields: [{ key: 'rows', label: '成员数据', type: 'textarea', placeholder: '张三,20260001,2026级经济管理1班,宣传部,成员\n李四,20260002,2026级会计1班,秘书部,部长' }],
+      hint: '每行一名成员，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码」排列，逗号或制表符分隔（可直接从 Excel 复制粘贴）；账号与初始密码留空则只建成员档案。',
+      fields: [{ key: 'rows', label: '成员数据', type: 'textarea', placeholder: '张三,男,汉族,共青团员,2026级经济管理1班,138****0001,宣传部,20260001,zhang01,123456\n李四,女,汉族,群众,2026级会计1班,139****0002,秘书部,20260002,li02,123456' }],
       extra: '<div class="field"><label>或选择 CSV 文件</label><input type="file" id="csvFile" accept=".csv,.txt" class="file-input"></div>',
       onSubmit(d) {
         const result = importMembers(d.rows);
@@ -174,14 +208,25 @@ function renderPersonnel() {
       title: '新增成员',
       fields: [
         { key: 'name', label: '姓名', required: true },
+        { key: 'gender', label: '性别', type: 'select', options: ['男', '女'] },
+        { key: 'ethnicity', label: '族别' },
+        { key: 'politics', label: '政治面貌', type: 'select', options: ['群众', '共青团员', '中共预备党员', '中共党员'] },
         { key: 'sno', label: '学号', required: true },
         { key: 'class', label: '班级' },
+        { key: 'phone', label: '联系电话' },
         { key: 'dept', label: '部门', type: 'select', options: DEPTS },
-        { key: 'title', label: '职务', type: 'select', options: TITLES }
+        { key: 'title', label: '职务', type: 'select', options: TITLES },
+        { key: 'account', label: '登录账号' },
+        { key: 'password', label: '初始密码' }
       ],
-      values: { dept: cur.role === 'minister' ? cur.dept : DEPTS[0], title: '成员' },
+      values: { gender: '男', ethnicity: '汉族', politics: '共青团员', dept: cur.role === 'minister' ? cur.dept : DEPTS[0], title: '成员' },
       onSubmit(d) {
-        db.members.push({ id: uid('m'), name: d.name, sno: d.sno, class: d.class, dept: d.dept, title: d.title, phone: '', status: '在任', joined: today() });
+        db.members.push({ id: uid('m'), name: d.name, sno: d.sno, class: d.class || '—', dept: d.dept, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.account || '', status: '在任', joined: today() });
+        if (d.account) {
+          if (db.accounts.some((a) => a.username === d.account)) { toast('账号已存在，未创建登录账号'); }
+          else if (!d.password || d.password.length < 6) { toast('初始密码不足 6 位，未创建登录账号'); }
+          else db.accounts.push({ username: d.account, password: d.password, name: d.name, role: 'student', dept: d.dept, title: d.title, sno: d.sno, class: d.class || '—', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
+        }
         commit('新增成员', `${d.name} · ${d.dept} · ${d.title}`); render(); toast('成员已添加');
       }
     });
@@ -216,22 +261,28 @@ function renderPersonnel() {
   });
 }
 
+function splitRow(line) {
+  let cells = line.split(/\t|,|，|;|；/).map((c) => c.trim());
+  if (cells.length === 1) cells = line.split(/\s+/);
+  return cells;
+}
+
 function importMembers(text) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
   let added = 0, skipped = 0;
   const messages = [];
   lines.forEach((line, idx) => {
-    let cells = line.split(/\t|,|，|;|；/).map((c) => c.trim());
-    if (cells.length === 1) cells = line.split(/\s+/);
-    const [name, sno, cls, dept, title] = cells;
+    const [name, gender, ethnicity, politics, cls, phone, dept, sno, account, password] = splitRow(line);
     if (!name || !sno) { skipped++; messages.push(`第 ${idx + 1} 行缺少姓名或学号，已跳过`); return; }
     if (db.members.some((m) => m.sno === sno && m.name === name)) { skipped++; messages.push(`第 ${idx + 1} 行「${name}」已存在，已跳过`); return; }
     let deptName = dept || DEPTS[0];
     if (!DEPTS.includes(deptName)) { skipped++; messages.push(`第 ${idx + 1} 行部门「${deptName}」不在五个标准部门内，已跳过`); return; }
-    const titleName = TITLES.includes(title) ? title : '成员';
-    db.members.push({ id: uid('m'), name, sno, class: cls || '—', dept: deptName, title: titleName, phone: '', status: '在任', joined: today() });
-    const d = db.departments.find((x) => x.name === deptName);
-    if (d && ['部长', '主席'].includes(titleName)) d.leader = name;
+    db.members.push({ id: uid('m'), name, sno, class: cls || '—', dept: deptName, title: '成员', phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', account: account || '', status: '在任', joined: today() });
+    if (account) {
+      if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未创建登录账号`); }
+      else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
+      else db.accounts.push({ username: account, password, name, role: 'student', dept: deptName, title: '成员', sno, class: cls || '—', phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '' });
+    }
     added++;
   });
   return { added, skipped, messages };
@@ -653,4 +704,160 @@ function renderJoin() {
       commit('驳回入会申请', j.name); save(); render(); toast('已驳回申请');
     };
   });
+}
+
+/* ---------------- 账号管理（管理员） ---------------- */
+const ROLE_KEY_FROM_LABEL = {
+  '管理员': 'admin', '主席团': 'presidium', '部长团': 'minister', '普通学生': 'student',
+  admin: 'admin', presidium: 'presidium', minister: 'minister', student: 'student'
+};
+
+function renderAccounts() {
+  if (cur.role !== 'admin') { switchView('dashboard'); return; }
+  const list = db.accounts.slice();
+  $('#views').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <div><h2>登录账号管理</h2><div class="sub">管理员批量导入账号与初始密码；成员登录后可自行修改密码，用户名保持不变</div></div>
+        <div class="toolbar">
+          <button class="primary-btn" id="importAccounts">批量导入账号</button>
+          <button class="primary-btn light" id="addAccount">+ 新增账号</button>
+          <button class="primary-btn light" id="exportAccounts">导出账号</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>账号</th><th>姓名</th><th>性别</th><th>族别</th><th>政治面貌</th><th>所在班级</th><th>联系电话</th><th>部门</th><th>职务</th><th>学号</th><th>角色</th><th>操作</th></tr></thead>
+        <tbody>${list.map((a) => `
+          <tr>
+            <td><strong>${esc(a.username)}</strong></td>
+            <td><div class="name-cell"><span class="mini-avatar">${esc(a.name.slice(-1))}</span>${esc(a.name)}</div></td>
+            <td>${esc(a.gender || '—')}</td>
+            <td>${esc(a.ethnicity || '—')}</td>
+            <td>${esc(a.politics || '—')}</td>
+            <td>${esc(a.class && a.class !== '—' ? a.class : '—')}</td>
+            <td>${esc(a.phone || '—')}</td>
+            <td>${esc(a.dept && a.dept !== '未加入' ? a.dept : '—')}</td>
+            <td>${esc(a.title || '—')}</td>
+            <td>${esc(a.sno && a.sno !== '—' ? a.sno : '—')}</td>
+            <td><span class="badge blue">${esc(ROLE_NAMES[a.role])}</span></td>
+            <td><div class="row-actions">
+              <button class="link-btn" data-reset="${esc(a.username)}">重置密码</button>
+              ${a.role !== 'admin' && a.username !== cur.username ? `<button class="link-btn del" data-delacc="${esc(a.username)}">移除</button>` : ''}
+            </div></td>
+          </tr>`).join('') || '<tr><td colspan="12" class="empty">暂无账号</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`;
+
+  $('#exportAccounts').onclick = () => {
+    const rows = db.accounts.map((a) => [a.username, a.name, a.gender || '', a.ethnicity || '', a.politics || '', a.class || '', a.phone || '', a.dept, a.title || '', a.sno || '', ROLE_NAMES[a.role]]);
+    openExportPicker('登录账号_' + today(), ['账号', '姓名', '性别', '族别', '政治面貌', '所在班级', '联系电话', '部门', '职务', '学号', '角色'], rows);
+  };
+
+  $('#importAccounts').onclick = () => {
+    const body = openForm({
+      title: '批量导入账号',
+      okText: '开始导入',
+      hint: '每行一名账号，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码,职务,角色」排列，逗号或制表符分隔（可从 Excel 复制粘贴）；角色可选：管理员/主席团/部长团/普通学生，留默认为普通学生；初始密码至少 6 位。导入后同时建立对应成员档案。',
+      fields: [{ key: 'rows', label: '账号数据', type: 'textarea', placeholder: '赵小林,男,汉族,共青团员,2026级经济管理1班,138****0031,秘书部,20260031,20260031,123456,成员,普通学生\n钱小燕,女,汉族,群众,2026级会计2班,139****0032,宣传部,20260032,20260032,123456,部长,部长团' }],
+      extra: '<div class="field"><label>或选择 CSV 文件</label><input type="file" id="accCsv" accept=".csv,.txt" class="file-input"></div>',
+      onSubmit(d) {
+        const r = importAccounts(d.rows);
+        commit('导入账号', `新增 ${r.added} 个，跳过 ${r.skipped} 行`);
+        render();
+        toast(`导入完成：新增 ${r.added} 个，跳过 ${r.skipped} 行`);
+        if (r.messages.length) setTimeout(() => openInfo('导入结果说明', `<div class="perm-list">${r.messages.map((m) => `<div class="perm-item"><span class="dot"></span>${esc(m)}</div>`).join('')}</div>`), 300);
+      }
+    });
+    body.querySelector('#accCsv').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { body.querySelector('#f_rows').value = String(reader.result).replace(/\r/g, ''); };
+      reader.readAsText(file, 'utf-8');
+    };
+  };
+
+  $('#addAccount').onclick = () => {
+    openForm({
+      title: '新增账号',
+      fields: [
+        { key: 'username', label: '账号', required: true },
+        { key: 'password', label: '初始密码', type: 'password', required: true },
+        { key: 'name', label: '姓名', required: true },
+        { key: 'gender', label: '性别', type: 'select', options: ['男', '女'] },
+        { key: 'ethnicity', label: '族别' },
+        { key: 'politics', label: '政治面貌', type: 'select', options: ['群众', '共青团员', '中共预备党员', '中共党员'] },
+        { key: 'sno', label: '学号' },
+        { key: 'class', label: '所在班级' },
+        { key: 'phone', label: '联系电话' },
+        { key: 'role', label: '角色', type: 'select', options: ['普通学生', '部长团', '主席团', '管理员'] },
+        { key: 'dept', label: '部门', type: 'select', options: ['未加入'].concat(DEPTS) },
+        { key: 'title', label: '职务', type: 'select', options: TITLES }
+      ],
+      values: { gender: '男', ethnicity: '汉族', politics: '共青团员', role: '普通学生', dept: '未加入', title: '成员' },
+      onSubmit(d) {
+        if (d.password.length < 6) { toast('初始密码至少 6 位'); return; }
+        if (db.accounts.some((a) => a.username === d.username)) { toast('用户名已存在'); return; }
+        const role = ROLE_KEY_FROM_LABEL[d.role];
+        db.accounts.push({ username: d.username, password: d.password, name: d.name, role, dept: d.dept, title: d.title, sno: d.sno || '', class: d.class || '', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
+        if (d.dept !== '未加入' && !db.members.some((m) => m.name === d.name && m.sno === d.sno)) {
+          db.members.push({ id: uid('m'), name: d.name, sno: d.sno || '—', class: d.class || '—', dept: d.dept, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.username, status: '在任', joined: today() });
+        }
+        commit('新增账号', `${d.username} · ${d.name}`); render(); toast('账号已添加');
+      }
+    });
+  };
+
+  document.querySelectorAll('[data-reset]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.accounts.find((x) => x.username === b.dataset.reset);
+      openForm({
+        title: '重置密码 · ' + a.username,
+        fields: [
+          { key: 'p1', label: '新初始密码', type: 'password', required: true },
+          { key: 'p2', label: '确认新密码', type: 'password', required: true }
+        ],
+        onSubmit(d) {
+          if (d.p1.length < 6) { toast('密码至少 6 位'); return; }
+          if (d.p1 !== d.p2) { toast('两次输入不一致'); return; }
+          a.password = d.p1;
+          commit('重置密码', a.username); save(); render(); toast('密码已重置');
+        }
+      });
+    };
+  });
+
+  document.querySelectorAll('[data-delacc]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.accounts.find((x) => x.username === b.dataset.delacc);
+      if (!confirm(`确定移除账号「${a.username}」（${a.name}）？移除后该账号将无法登录。`)) return;
+      db.accounts = db.accounts.filter((x) => x.username !== a.username);
+      db.members.forEach((m) => { if (m.account === a.username) m.account = ''; });
+      commit('移除账号', a.username); save(); render(); toast('账号已移除');
+    };
+  });
+}
+
+function importAccounts(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  let added = 0, skipped = 0;
+  const messages = [];
+  lines.forEach((line, idx) => {
+    const [name, gender, ethnicity, politics, cls, phone, dept, sno, username, password, titleLabel, roleLabel] = splitRow(line);
+    if (!username || !password || !name) { skipped++; messages.push(`第 ${idx + 1} 行缺少账号、初始密码或姓名，已跳过`); return; }
+    if (password.length < 6) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」初始密码不足 6 位，已跳过`); return; }
+    if (db.accounts.some((a) => a.username === username)) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」账号已存在，已跳过`); return; }
+    const role = ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || 'student';
+    const deptName = dept || '未加入';
+    if (deptName !== '未加入' && !DEPTS.includes(deptName)) { skipped++; messages.push(`第 ${idx + 1} 行部门「${deptName}」不在五个标准部门内，已跳过`); return; }
+    const titleName = TITLES.includes(titleLabel) ? titleLabel : '成员';
+    const profile = { name, gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', class: cls || '—', phone: phone || '', dept: deptName, sno: sno || '—' };
+    db.accounts.push({ username, password, name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+    let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
+    if (mem) Object.assign(mem, profile, { title: titleName, account: username, status: mem.status || '在任' });
+    else db.members.push(Object.assign({ id: uid('m'), account: username, title: titleName, status: '在任', joined: today() }, profile));
+    added++;
+  });
+  return { added, skipped, messages };
 }
