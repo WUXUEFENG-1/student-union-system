@@ -185,7 +185,7 @@ function renderPersonnel() {
       okText: '开始导入',
       hint: '每行一名成员，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码」排列，逗号或制表符分隔（可直接从 Excel 复制粘贴）；账号与初始密码留空则只建成员档案。',
       fields: [{ key: 'rows', label: '成员数据', type: 'textarea', placeholder: '张三,男,汉族,共青团员,2026级经济管理1班,138****0001,宣传部,20260001,zhang01,123456\n李四,女,汉族,群众,2026级会计1班,139****0002,秘书部,20260002,li02,123456' }],
-      extra: '<div class="field"><label>或选择 CSV 文件</label><input type="file" id="csvFile" accept=".csv,.txt" class="file-input"></div>',
+      extra: '<div class="field"><label>或选择 Excel / CSV 文件（.xlsx .csv .txt）</label><input type="file" id="csvFile" accept=".csv,.txt,.xlsx" class="file-input"></div>',
       onSubmit(d) {
         const result = importMembers(d.rows);
         commit('导入成员', `新增 ${result.added} 人，跳过 ${result.skipped} 行`);
@@ -197,9 +197,7 @@ function renderPersonnel() {
     body.querySelector('#csvFile').onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => { body.querySelector('#f_rows').value = String(reader.result).replace(/\r/g, ''); };
-      reader.readAsText(file, 'utf-8');
+      readImportFile(file, body.querySelector('#f_rows'));
     };
   };
 
@@ -265,6 +263,17 @@ function splitRow(line) {
   let cells = line.split(/\t|,|，|;|；/).map((c) => c.trim());
   if (cells.length === 1) cells = line.split(/\s+/);
   return cells;
+}
+
+function readImportFile(file, targetEl) {
+  const fill = (text) => { targetEl.value = String(text).replace(/\r/g, ''); };
+  if (/\.xlsx$/i.test(file.name)) {
+    parseXlsxFile(file).then(fill).catch((err) => toast('Excel 解析失败：' + err.message));
+  } else {
+    const reader = new FileReader();
+    reader.onload = () => fill(reader.result);
+    reader.readAsText(file, 'utf-8');
+  }
 }
 
 function importMembers(text) {
@@ -760,7 +769,7 @@ function renderAccounts() {
       okText: '开始导入',
       hint: '每行一名账号，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码,职务,角色」排列，逗号或制表符分隔（可从 Excel 复制粘贴）；角色可选：管理员/主席团/部长团/普通学生，留默认为普通学生；初始密码至少 6 位。导入后同时建立对应成员档案。',
       fields: [{ key: 'rows', label: '账号数据', type: 'textarea', placeholder: '赵小林,男,汉族,共青团员,2026级经济管理1班,138****0031,秘书部,20260031,20260031,123456,成员,普通学生\n钱小燕,女,汉族,群众,2026级会计2班,139****0032,宣传部,20260032,20260032,123456,部长,部长团' }],
-      extra: '<div class="field"><label>或选择 CSV 文件</label><input type="file" id="accCsv" accept=".csv,.txt" class="file-input"></div>',
+      extra: '<div class="field"><label>或选择 Excel / CSV 文件（.xlsx .csv .txt）</label><input type="file" id="accCsv" accept=".csv,.txt,.xlsx" class="file-input"></div>',
       onSubmit(d) {
         const r = importAccounts(d.rows);
         commit('导入账号', `新增 ${r.added} 个，跳过 ${r.skipped} 行`);
@@ -772,9 +781,7 @@ function renderAccounts() {
     body.querySelector('#accCsv').onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => { body.querySelector('#f_rows').value = String(reader.result).replace(/\r/g, ''); };
-      reader.readAsText(file, 'utf-8');
+      readImportFile(file, body.querySelector('#f_rows'));
     };
   };
 
