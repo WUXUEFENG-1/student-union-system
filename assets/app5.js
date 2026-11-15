@@ -320,8 +320,8 @@ render = function () {
       }
     });
   }
-  // 主席团/管理员：换届竞选报名时段设置
-  if (allPower()) {
+  // 主席团/管理员：换届竞选报名时段设置（仅工作台显示）
+  if (allPower() && curView === 'dashboard') {
     const p = electionPeriod();
     const wrap = document.createElement('div');
     wrap.className = 'card';
