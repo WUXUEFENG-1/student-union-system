@@ -318,6 +318,11 @@ $('#modalMask').onclick = (e) => { if (e.target.id === 'modalMask') closeModal()
 
 /* ---------------- 登录 ---------------- */
 function doLogin() {
+  if (window.__syncReady === false) {
+    $('#loginErr').textContent = '正在同步云端名单，请稍候再登录';
+    $('#loginErr').classList.remove('hidden');
+    return;
+  }
   const u = $('#loginUser').value.trim();
   const p = $('#loginPass').value;
   const acc = db.accounts.find((a) => a.username === u && a.password === p);
