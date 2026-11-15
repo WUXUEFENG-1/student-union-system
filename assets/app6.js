@@ -667,7 +667,7 @@ function buildResignDocx(a) {
 <w:body>
 <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>应用经济系学生会退会申请表</w:t></w:r></w:p>
 <w:tbl><w:tblPr><w:tblW w:w="9036" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>
-<w:tblGrid><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/></w:tblGrid>
+<w:tblGrid><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/></w:gridCol>
 ${rowsXml}
 </w:tbl>
 </w:body></w:document>`;
@@ -807,21 +807,20 @@ plProofHtml = function (a) {
   Object.keys(map).forEach((k) => { body = body.split(k).join(String(map[k] == null ? '—' : map[k])); });
   const lines = esc(body).split('\n');
   const paras = lines.map((ln, i) => `<p style="margin:0 0 ${i === 0 ? '18px' : '12px'};${i === 0 ? '' : 'text-indent:2em'}">${ln}</p>`).join('');
-  const signs = (a.approveSigns || []).filter((s) => s && s.sign);
+  const signs = a.approveSigns || [];
   const signBlock = signs.length ? signs.map((s) => {
     const id = actorIdentity(s.actor) || s.actor;
-    const img = s.sign ? `<img src="${s.sign}" style="height:28px;vertical-align:middle">` : '____________';
+    const img = s.sign ? `<img src="${s.sign}" style="height:30px;vertical-align:middle">` : '____________';
     const ph = s.phone ? `　联系电话：${esc(s.phone)}` : '';
-    return `<p style="margin:0 0 14px">${esc(id)}（签字）：${img}${ph}</p>`;
-  }).join('') : '<p style="margin:0 0 14px">负责人签字：____________</p>';
+    return `<p style="margin:0 0 16px;text-indent:2em">${esc(id)}（签字）：${img}${ph}</p>`;
+  }).join('') : '<p style="margin:0 0 16px;text-indent:2em">负责人签字：____________</p>';
   return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:16pt;line-height:1.9;max-width:760px;margin:0 auto;padding:32px 24px">
     <h2 style="text-align:center;font-size:18pt;font-weight:bold;margin:0 0 28px">${esc(plTemplate().title || '证明')}</h2>
     ${paras}
-    <div style="margin-top:40px;padding-left:2em">
+    <div style="margin-top:40px">
       ${signBlock}
-      <p style="margin:0 0 18px">联系电话：${esc(map['{联系电话}'])}</p>
-      <p style="margin:0 0 18px">日期：${esc(map['{出具日期}'])}</p>
-      <p style="margin:0 0 18px">编号：${esc(a.proofNo || '—')}</p>
+      <p style="margin:0 0 16px;text-indent:2em">日期：${esc(map['{出具日期}'])}</p>
+      <p style="margin:0 0 16px;text-indent:2em">编号：${esc(a.proofNo || '—')}</p>
     </div>
   </div>`;
 };
