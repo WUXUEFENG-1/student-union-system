@@ -483,13 +483,11 @@ const _render6 = render;
 /* 四级岗位 ↔ 审批节点顺序：副部长 → 部长 → 副主席 → 主席（竞选沿用） */
 const STAGE_TITLE6 = ['副部长', '部长', '副主席', '主席'];
 
-/* 当前用户是否可见这条待办：退会走动态节点权限，竞选沿用四级岗位比对 */
+/* 当前用户是否可见这条待办：统一按当前节点审批权限判定，本人不可见 */
 function resignTodoVisible(a) {
   if (isSelf(a)) return false;
   if (cur.role === 'admin') return true;
-  if (a.type === 'leaveclub') return canApprove(a);
-  if (a.type === 'election') return STAGE_TITLE6[a.stage] === (cur.title || '');
-  return true;
+  return canApprove(a);
 }
 
 /* 重绑审批的通过 / 驳回按钮：岗位不符的直接移除，避免跨级操作 */
@@ -548,11 +546,11 @@ render = function () {
       const tbody = card.querySelector('tbody');
       if (!tbody) return;
       db.applies.forEach((a) => {
-        if (a.type !== 'leaveclub') return;
-        if (!['待审核', '审核中', '待分派', '处理中'].includes(a.status)) return;
+        if (!PENDING_STATUS6.includes(a.status)) return;
         if (tbody.querySelector(`[data-apply-view="${a.id}"]`)) return;
         if (!canApprove(a)) return;
-        tbody.insertAdjacentHTML('beforeend', resignRow(a));
+        const rowHtml = a.type === 'leaveclub' ? resignRow(a) : applyRow(a, true);
+        tbody.insertAdjacentHTML('beforeend', rowHtml);
       });
     });
   }
