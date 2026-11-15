@@ -30,6 +30,28 @@ canApprove = function (a) {
   return _canApprove6(a);
 };
 
+/* ---------- 1b) 工作台待办计数：只统计当前岗位真正可审批的申请，与待我审批列表口径一致 ---------- */
+const PENDING_STATUS6 = ['待审核', '审核中', '待分派', '处理中'];
+function myReviewApplies() {
+  return (db.applies || []).filter((x) => {
+    if (!PENDING_STATUS6.includes(x.status)) return false;
+    if (cur.role === 'admin' || cur.role === 'teacher') return true;
+    if (cur.role === 'minister' && x.dept !== cur.dept) return false;
+    return canApprove(x);
+  });
+}
+const _pendingTasks6 = pendingTasks;
+pendingTasks = function () {
+  const t = _pendingTasks6();
+  const idx = t.findIndex((x) => x[0] === '申请待审批');
+  if (idx >= 0) {
+    const n = myReviewApplies().length;
+    if (n) t[idx][1] = n;
+    else t.splice(idx, 1);
+  }
+  return t;
+};
+
 /* ---------- 2) 申请表单：手写签名板 + 上传签字照片 ---------- */
 const _openForm6 = openForm;
 openForm = function (opts) {
