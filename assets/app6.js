@@ -386,9 +386,41 @@ openForm = function (opts) {
 };
 
 /* ---------- 3) 详情视图：退会信息回显（导出入口常显） ---------- */
+/* 公假证明：已终审记录在详情弹窗补回 下载 / 导出存档 / 作废 入口（基线 app5 详情漏掉） */
+function attachPlArchiveButtons(a) {
+  const approved = a.status === '已通过' && !!a.proofNo;
+  if (!approved) return;
+  const isOwner = a.name === cur.name;
+  const canArchive = allPower() || ['presidium', 'minister', 'teacher'].includes(cur.role);
+  let html = '';
+  if (isOwner) html += `<button class="primary-btn" id="plDownload">下载证明</button>`;
+  if (canArchive) html += `<button class="primary-btn light" id="plArchive">导出证明存档</button>`;
+  if (isOwner || cur.role === 'admin') html += `<button class="link-btn del" id="plVoid">作废申请</button>`;
+  if (!html) return;
+  const body = document.getElementById('modalBody');
+  if (!body) return;
+  const bar = document.createElement('div');
+  bar.className = 'row-actions';
+  bar.style.marginTop = '12px';
+  bar.innerHTML = html;
+  body.appendChild(bar);
+  const dl = document.getElementById('plDownload'), ar = document.getElementById('plArchive'), vd = document.getElementById('plVoid');
+  if (dl) dl.onclick = () => plFormatPicker(a, false);
+  if (ar) ar.onclick = () => plFormatPicker(a, true);
+  if (vd) vd.onclick = () => {
+    if (!confirm('作废后该证明不可再下载，记录保留归档；信息有误需重新提交新申请。确定作废这条申请？')) return;
+    a.status = '已作废'; a.locked = true;
+    a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '作废申请', note: '证明作废，归档保留', time: today() });
+    commit('作废公假证明', `${a.proofNo} · ${a.name}`); save(); closeModal(); render(); toast('申请已作废，记录归档');
+  };
+}
 const _openApplyInfo6 = openApplyInfo;
 openApplyInfo = function (a) {
-  if (a.type !== 'leaveclub') return _openApplyInfo6(a);
+  if (a.type !== 'leaveclub') {
+    _openApplyInfo6(a);
+    if (a.type === 'publicLeave') attachPlArchiveButtons(a);
+    return;
+  }
   const v = a.values || {};
   const p = personOf(a);
   const auto = [
