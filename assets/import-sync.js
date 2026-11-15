@@ -29,7 +29,7 @@ importMembers = function (text) {
       Object.assign(mem, profile, { status: mem.status || '在任' });
       if (account) mem.account = account;
       const acc = db.accounts.find((a) => a.username === mem.account) || (account ? db.accounts.find((a) => a.username === account) : null);
-      if (acc) Object.assign(acc, { name, dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics, role: acc.role === 'admin' ? 'admin' : roleFromTitle(titleName) });
+      if (acc) Object.assign(acc, { name, dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics, role: ['admin', 'teacher'].includes(acc.role) ? acc.role : roleFromTitle(titleName) });
       updated++;
       messages.push(`第 ${idx + 1} 行「${name}」已按表同步更新`);
     } else {
@@ -60,7 +60,7 @@ importAccounts = function (text) {
     const titleName = normalizeTitle(titleLabel);
     const profile = { name, gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', class: cls || '—', phone: phone || '', dept: deptName, sno: sno || '—' };
     let acc = db.accounts.find((a) => a.username === username);
-    const role = acc && acc.role === 'admin' ? 'admin' : (ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || roleFromTitle(titleName));
+    const role = acc && ['admin', 'teacher'].includes(acc.role) ? acc.role : (ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || roleFromTitle(titleName));
     if (acc) {
       Object.assign(acc, { name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
       let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
