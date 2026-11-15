@@ -145,8 +145,8 @@ function applyApproved(a) {
 
 /* ---------------- 活动公假证明：模板回填与导出 ---------------- */
 const DEFAULT_PL_TEMPLATE = {
-  title: '活动公假证明',
-  body: '兹有{专业}{班级}学生{姓名}（学号：{学号}，所属部门：{所属部门}），于{活动起止时间}在{活动地点}参加「{活动名称}」活动。\n因参加本次活动，需请假课程及日期：{请假课程及日期}。\n{申请说明}\n申请份数与用途：{申请份数与用途}。\n特此证明。'
+  title: '应用经济系学生会证明',
+  body: '尊敬的辅导员、班主任、各位科任老师：\n兹有{专业}{班级}学生{姓名}，学号：{学号}，系我系学生会成员。\n该同学将于{活动起止时间}，参加由本系学生会组织的{活动名称}活动，活动地点为：{活动地点}。\n因参加本系学生会组织的正式活动，需请假{请假课程及日期}，活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。{申请说明}\n特此证明，请老师予以批准。'
 };
 function plTemplate() { return (db.templates && db.templates.publicLeave) || DEFAULT_PL_TEMPLATE; }
 function cnDate(s) {
@@ -290,7 +290,7 @@ function renderJoin() {
     $('#plTplBody').value = tpl.body;
     $('#plTplSave').onclick = () => {
       db.templates = db.templates || {};
-      db.templates.publicLeave = { title: $('#plTplTitle').value.trim() || '活动公假证明', body: $('#plTplBody').value.trim() };
+      db.templates.publicLeave = { title: $('#plTplTitle').value.trim() || '应用经济系学生会证明', body: $('#plTplBody').value.trim() };
       commit('维护公假证明模板', '更新证明排版'); save(); render(); toast('模板已保存');
     };
   }
