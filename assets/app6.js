@@ -3,7 +3,7 @@
 /* 退会申请：四级签字流程，与换届竞选一致 */
 APPLY_TYPES.leaveclub = {
   name: '退会申请',
-  hint: '审批依次为 副部长 → 部长 → 副主席 → 主席 签字；全部通过后成员状态标记为已退会，档案转为只读。',
+  hint: '按申请人职务逐级审批：干部由上级审批至主席后报责任教师终审；成员经副部长、部长、副主席、主席审批。全部通过后成员状态标记为已退会，档案转为只读。',
   stages: ['副部长审核', '部长审核', '副主席审核', '主席审核'],
   fields: [
     { key: 'reason', label: '退会原因', type: 'textarea', required: true },
@@ -15,11 +15,55 @@ APPLY_TYPES.leaveclub = {
 /* 四级岗位严格隔离的申请类型 */
 const FOUR_LEVEL_TYPES = ['election', 'leaveclub'];
 
-/* ---------- 1) 审批权限：按四级岗位严格限定，不可跨级代审 ---------- */
+/* ---------- 退会动态审批链：按申请人职务，从上级逐级审批，干部由责任教师终审 ---------- */
+const RESIGN_NODES = {
+  '副部长审核': { role: 'minister', title: '副部长' },
+  '部长审核': { role: 'minister', title: '部长' },
+  '副主席审核': { role: 'presidium', title: '副主席' },
+  '主席审核': { role: 'presidium', title: '主席' },
+  '责任教师审核': { role: 'teacher', title: '责任教师' }
+};
+
+function resignFlow(title) {
+  const t = normalizeTitle(title);
+  if (t === '副部长') return ['部长审核', '副主席审核', '主席审核', '责任教师审核'];
+  if (t === '部长') return ['副主席审核', '主席审核', '责任教师审核'];
+  if (t === '副主席') return ['主席审核', '责任教师审核'];
+  if (t === '主席') return ['责任教师审核'];
+  return ['副部长审核', '部长审核', '副主席审核', '主席审核'];
+}
+
+function ensureFlow(a) {
+  if (a.type !== 'leaveclub') return;
+  if (!Array.isArray(a.flow) || !a.flow.length) a.flow = resignFlow(a.title);
+}
+
+/* 审批人身份称谓（导出表落款用） */
+function nodeIdentity(label, dept) {
+  switch (label) {
+    case '副部长审核': return `是我系学生会 ${dept || ''} 副部长`;
+    case '部长审核': return `是我系学生会 ${dept || ''} 部长`;
+    case '副主席审核': return '是我系学生会副主席';
+    case '主席审核': return '是我系学生会主席';
+    case '责任教师审核': return '责任教师';
+    default: return label;
+  }
+}
+
+/* ---------- 1) 审批权限：按动态节点岗位严格限定，不可跨级代审 ---------- */
 const _canApprove6 = canApprove;
 canApprove = function (a) {
   if (cur.role === 'admin') return true;
-  if (FOUR_LEVEL_TYPES.includes(a.type)) {
+  if (a.type === 'leaveclub') {
+    ensureFlow(a);
+    const node = RESIGN_NODES[a.flow[a.stage]];
+    if (!node) return false;
+    if (node.role === 'teacher') return cur.role === 'teacher';
+    if (node.role === 'minister') return cur.role === 'minister' && cur.title === node.title && cur.dept === a.dept;
+    if (node.role === 'presidium') return cur.title === node.title;
+    return false;
+  }
+  if (a.type === 'election') {
     const t = cur.title || '';
     if (a.stage === 0) return t === '副部长';
     if (a.stage === 1) return t === '部长';
@@ -35,7 +79,7 @@ const PENDING_STATUS6 = ['待审核', '审核中', '待分派', '处理中'];
 function myReviewApplies() {
   return (db.applies || []).filter((x) => {
     if (!PENDING_STATUS6.includes(x.status)) return false;
-    if (cur.role === 'admin' || cur.role === 'teacher') return true;
+    if (cur.role === 'admin') return true;
     if (cur.role === 'minister' && x.dept !== cur.dept) return false;
     return canApprove(x);
   });
@@ -52,7 +96,58 @@ pendingTasks = function () {
   return t;
 };
 
-/* ---------- 2) 申请表单：手写签名板 + 上传签字照片 ---------- */
+/* ---------- 2) 退会专用审批弹窗：按动态节点流转，签字入 approveSigns ---------- */
+function openResignApproveForm(a) {
+  ensureFlow(a);
+  const label = a.flow[a.stage] || '审核';
+  let signFile = '';
+  let canvasDirty = false;
+  const body = openForm({
+    title: label + ' · ' + a.name,
+    hint: '请在下方手写签字（或上传签字图片），可填写审批意见，确认后通过审批。',
+    fields: [{ key: 'opinion', label: '审批意见', type: 'textarea' }],
+    extra: `<div class="field"><label>手写签字（可直接在线书写，或点“选择文件”上传签字图片）</label>
+      <canvas id="apCanvas" width="320" height="120" style="border:1px solid #d9e2ec;border-radius:8px;background:#fff;touch-action:none"></canvas>
+      <div class="row-actions" style="margin-top:8px">
+        <button type="button" class="link-btn" id="apClear">清除重写</button>
+        <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
+      </div></div>`,
+    onSubmit(d) {
+      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
+      const signs = (a.approveSigns = a.approveSigns || []);
+      signs.push({ sign: signData, phone: '', opinion: d.opinion || '', actor: cur.name, role: ROLE_NAMES[cur.role], action: label, time: today() });
+      const last = a.stage >= a.flow.length - 1;
+      const note = d.opinion ? '意见：' + d.opinion : '';
+      a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: label + '通过', note, time: today() });
+      if (last) { a.status = '已通过'; applyApproved(a); }
+      else { a.stage += 1; a.status = '审核中'; }
+      commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
+      save(); render();
+      toast(last ? '申请已通过' : '已流转至下一审批节点');
+    }
+  });
+  const cv = body.querySelector('#apCanvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return { x: p.clientX - r.left, y: p.clientY - r.top }; };
+  cv.addEventListener('pointerdown', (e) => { drawing = true; canvasDirty = true; ctx.beginPath(); const p = pos(e); ctx.moveTo(p.x, p.y); });
+  cv.addEventListener('pointermove', (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  const stop = () => { drawing = false; };
+  cv.addEventListener('pointerup', stop);
+  cv.addEventListener('pointerleave', stop);
+  body.querySelector('#apClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); canvasDirty = false; };
+  body.querySelector('#apSign').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
+    const rd = new FileReader();
+    rd.onload = () => { signFile = rd.result; };
+    rd.readAsDataURL(f);
+  };
+}
+
+/* ---------- 3) 申请表单：手写签名板 + 上传签字照片 ---------- */
 const _openForm6 = openForm;
 openForm = function (opts) {
   const body = _openForm6(opts);
@@ -271,23 +366,24 @@ function bindResignExport() {
 
 const _render6 = render;
 
-/* 四级岗位 ↔ 审批节点顺序：副部长 → 部长 → 副主席 → 主席 */
+/* 四级岗位 ↔ 审批节点顺序：副部长 → 部长 → 副主席 → 主席（竞选沿用） */
 const STAGE_TITLE6 = ['副部长', '部长', '副主席', '主席'];
 
-/* 当前用户是否可见这条四级待办（岗位与节点严格一一对应） */
+/* 当前用户是否可见这条待办：退会走动态节点权限，竞选沿用四级岗位比对 */
 function resignTodoVisible(a) {
-  if (!FOUR_LEVEL_TYPES.includes(a.type)) return true;
   if (cur.role === 'admin') return true;
-  return STAGE_TITLE6[a.stage] === (cur.title || '');
+  if (a.type === 'leaveclub') return canApprove(a);
+  if (a.type === 'election') return STAGE_TITLE6[a.stage] === (cur.title || '');
+  return true;
 }
 
-/* 重绑四级审批的通过 / 驳回按钮：岗位不符的直接移除，避免跨级操作 */
+/* 重绑审批的通过 / 驳回按钮：岗位不符的直接移除，避免跨级操作 */
 function bindResignActions() {
   document.querySelectorAll('[data-apply-pass]').forEach((btn) => {
     const a = (db.applies || []).find((x) => x.id === btn.dataset.applyPass);
     if (!a || !FOUR_LEVEL_TYPES.includes(a.type)) return;
     if (!canApprove(a)) { btn.remove(); return; }
-    btn.onclick = () => openApproveForm(a);
+    btn.onclick = () => (a.type === 'leaveclub' ? openResignApproveForm(a) : openApproveForm(a));
   });
   document.querySelectorAll('[data-apply-reject]').forEach((btn) => {
     const a = (db.applies || []).find((x) => x.id === btn.dataset.applyReject);
@@ -330,7 +426,7 @@ function filterResignTodo() {
 
 render = function () {
   _render6();
-  if (cur.role === 'minister' || cur.role === 'presidium') {
+  if (['minister', 'presidium', 'teacher'].includes(cur.role)) {
     document.querySelectorAll('.card').forEach((card) => {
       const h2 = card.querySelector('h2');
       if (!h2 || !h2.textContent.includes('待我审批')) return;
@@ -376,18 +472,32 @@ function buildResignDocx(a) {
     return `<w:tc>${pr}<w:p>${content || ''}</w:p></w:tc>`;
   };
 
+  ensureFlow(a);
+  const flow = a.flow;
+  const deptName = a.dept || p.dept || '';
   const appRid = addMedia(v.applicantSign);
   const signRid = {};
-  ['副部长审核', '部长审核', '副主席审核', '主席审核'].forEach((s) => { signRid[s] = addMedia(signOf(a, s)); });
+  flow.forEach((s) => { signRid[s] = addMedia(signOf(a, s)); });
   const sigImg = (s) => signRid[s] ? imgRun(signRid[s], 720000, 360000) : '____________';
   const appSig = appRid ? imgRun(appRid, 720000, 360000) : '____________';
   const op = (arr) => arr.map((x) => opinionOf(a, x)).filter(Boolean).join('；') || '—';
   const dateStr = cnDate(a.approvedAt || a.date);
 
+  const groupLine = (labels) => {
+    if (!labels.length) return '';
+    let html = run(`意见：${op(labels)}`);
+    labels.forEach((s) => {
+      html += '<w:r><w:br/></w:r>' + run(nodeIdentity(s, deptName) + '（签字）：') + sigImg(s);
+    });
+    html += '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
+    return html;
+  };
+  const deptNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'minister');
+  const presNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'presidium');
+  const teacherNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'teacher');
+
   const statement = '本人自愿申请退出应用经济系学生会。退出后不再以系学生会成员身份参与工作，已交回学生会配发物资、在办事项及相关工作资料，无遗留纠纷。';
   const cStatement = run(statement) + '<w:r><w:br/></w:r>' + run('申请人（签字）：') + appSig + run(`　　日期：${dateStr}`);
-  const cDept = run(`意见：${op(['副部长审核', '部长审核'])}`) + '<w:r><w:br/></w:r>' + run('副部长（签字）：') + sigImg('副部长审核') + run('　　部长（签字）：') + sigImg('部长审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
-  const cPres = run(`意见：${op(['副主席审核', '主席审核'])}`) + '<w:r><w:br/></w:r>' + run('副主席（签字）：') + sigImg('副主席审核') + run('　　主席（签字）：') + sigImg('主席审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
 
   const rows = [
     `<w:tr>${cell(run('姓    名', { bold: true }))}${cell(run(a.name))}${cell(run('性    别', { bold: true }))}${cell(run(p.gender || '—'))}</w:tr>`,
@@ -397,10 +507,12 @@ function buildResignDocx(a) {
     `<w:tr>${cell(run('现任职务', { bold: true }))}${cell(run(a.title || p.title || '—'))}${cell(run('入会时间', { bold: true }))}${cell(run(p.joined || '—'))}</w:tr>`,
     `<w:tr>${cell(run('退会原因', { bold: true }))}${cell(run(v.reason || '—'), { span: 3 })}</w:tr>`,
     `<w:tr>${cell(run('工作交接情况', { bold: true }))}${cell(run(v.handover || '—'), { span: 3 })}</w:tr>`,
-    `<w:tr>${cell(run('本人声明', { bold: true }))}${cell(cStatement, { span: 3 })}</w:tr>`,
-    `<w:tr>${cell(run('部门意见', { bold: true }))}${cell(cDept, { span: 3 })}</w:tr>`,
-    `<w:tr>${cell(run('主席团意见', { bold: true }))}${cell(cPres, { span: 3 })}</w:tr>`
-  ].join('');
+    `<w:tr>${cell(run('本人声明', { bold: true }))}${cell(cStatement, { span: 3 })}</w:tr>`
+  ];
+  if (deptNodes.length) rows.push(`<w:tr>${cell(run('部门意见', { bold: true }))}${cell(groupLine(deptNodes), { span: 3 })}</w:tr>`);
+  if (presNodes.length) rows.push(`<w:tr>${cell(run('主席团意见', { bold: true }))}${cell(groupLine(presNodes), { span: 3 })}</w:tr>`);
+  if (teacherNodes.length) rows.push(`<w:tr>${cell(run('责任教师意见', { bold: true }))}${cell(groupLine(teacherNodes), { span: 3 })}</w:tr>`);
+  const rowsXml = rows.join('');
 
   const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
     .map((b) => `<w:${b} w:val="single" w:sz="4" w:space="0" w:color="333333"/>`).join('');
@@ -411,7 +523,7 @@ function buildResignDocx(a) {
 <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>应用经济系学生会退会申请表</w:t></w:r></w:p>
 <w:tbl><w:tblPr><w:tblW w:w="9036" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>
 <w:tblGrid><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/><w:gridCol w:w="2259"/></w:tblGrid>
-${rows}
+${rowsXml}
 </w:tbl>
 </w:body></w:document>`;
 
@@ -449,6 +561,9 @@ ${media.map((m) => `<Relationship Id="${m.rid}" Type="http://schemas.openxmlform
 function resignPrintBody(a) {
   const v = a.values || {};
   const p = personOf(a);
+  ensureFlow(a);
+  const flow = a.flow;
+  const deptName = a.dept || p.dept || '';
   const sig = (s) => signOf(a, s) ? `<img src="${signOf(a, s)}" style="height:30px;vertical-align:middle">` : '____________';
   const appSig = v.applicantSign ? `<img src="${v.applicantSign}" style="height:30px;vertical-align:middle">` : '____________';
   const op = (arr) => arr.map((x) => opinionOf(a, x)).filter(Boolean).join('；') || '—';
@@ -457,19 +572,29 @@ function resignPrintBody(a) {
   const wide = (t) => `<td colspan="3">${t}</td>`;
   const dateStr = cnDate(a.approvedAt || a.date);
   const statement = '本人自愿申请退出应用经济系学生会。退出后不再以系学生会成员身份参与工作，已交回学生会配发物资、在办事项及相关工作资料，无遗留纠纷。';
+  const groupRow = (label, labels) => {
+    if (!labels.length) return '';
+    const lines = labels.map((s) => `${nodeIdentity(s, deptName)}（签字）：${sig(s)}`).join('　　');
+    return `<tr>${lab(label)}${wide(`意见：${op(labels)}<br>${lines}<br>日期：${dateStr}`)}</tr>`;
+  };
+  const deptNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'minister');
+  const presNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'presidium');
+  const teacherNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'teacher');
+  const rows = [
+    `<tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}</tr>`,
+    `<tr>${lab('学号')}${cell(a.sno)}${lab('联系方式')}${cell(p.phone)}</tr>`,
+    `<tr>${lab('班级')}${cell(a.class)}${lab('民族')}${cell(p.ethnicity)}</tr>`,
+    `<tr>${lab('政治面貌')}${cell(p.politics)}${lab('所在部门')}${cell(a.dept || p.dept)}</tr>`,
+    `<tr>${lab('现任职务')}${cell(a.title || p.title)}${lab('入会时间')}${cell(p.joined)}</tr>`,
+    `<tr>${lab('退会原因')}${wide(esc(v.reason || '—'))}</tr>`,
+    `<tr>${lab('工作交接情况')}${wide(esc(v.handover || '—'))}</tr>`,
+    `<tr>${lab('本人声明')}${wide(`${esc(statement)}<br>申请人（签字）：${appSig}　　日期：${dateStr}`)}</tr>`,
+    groupRow('部门意见', deptNodes),
+    groupRow('主席团意见', presNodes),
+    groupRow('责任教师意见', teacherNodes)
+  ].filter(Boolean).join('');
   return `<h2>应用经济系学生会退会申请表</h2>
-  <table>
-    <tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}</tr>
-    <tr>${lab('学号')}${cell(a.sno)}${lab('联系方式')}${cell(p.phone)}</tr>
-    <tr>${lab('班级')}${cell(a.class)}${lab('民族')}${cell(p.ethnicity)}</tr>
-    <tr>${lab('政治面貌')}${cell(p.politics)}${lab('所在部门')}${cell(a.dept || p.dept)}</tr>
-    <tr>${lab('现任职务')}${cell(a.title || p.title)}${lab('入会时间')}${cell(p.joined)}</tr>
-    <tr>${lab('退会原因')}${wide(esc(v.reason || '—'))}</tr>
-    <tr>${lab('工作交接情况')}${wide(esc(v.handover || '—'))}</tr>
-    <tr>${lab('本人声明')}${wide(`${esc(statement)}<br>申请人（签字）：${appSig}　　日期：${dateStr}`)}</tr>
-    <tr>${lab('部门意见')}${wide(`意见：${op(['副部长审核', '部长审核'])}<br>副部长（签字）：${sig('副部长审核')}　　部长（签字）：${sig('部长审核')}<br>日期：${dateStr}`)}</tr>
-    <tr>${lab('主席团意见')}${wide(`意见：${op(['副主席审核', '主席审核'])}<br>副主席（签字）：${sig('副主席审核')}　　主席（签字）：${sig('主席审核')}<br>日期：${dateStr}`)}</tr>
-  </table>`;
+  <table>${rows}</table>`;
 }
 
 function resignPrintHtml(a) {
