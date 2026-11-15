@@ -98,11 +98,8 @@
           markReady();
           return;
         }
-        const remoteAt = row.updated_at || '';
-        const localAt = db[FLAG] || '';
-        if (!localAt || remoteAt > localAt) {
-          applyRemote(row);
-        }
+        /* 初始拉取一律以云端为准：云端名单覆盖本机残留，避免已删除项复活、旧账号表残留 */
+        applyRemote(row);
         status('云端已连接 · 名单实时同步', true);
         markReady();
       });
