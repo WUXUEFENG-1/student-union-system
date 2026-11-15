@@ -1,3 +1,14 @@
+/* ================= 职务选项：干事 → 责任教师 ================= */
+(function () {
+  const di = TITLES.indexOf('干事');
+  if (di >= 0) TITLES[di] = '责任教师';
+  const _roleFromTitle = roleFromTitle;
+  roleFromTitle = function (title) {
+    if (title === '责任教师') return 'teacher';
+    return _roleFromTitle(title);
+  };
+})();
+
 /* 增补申请事项：考核申诉、活动变更申请（在 app4 的 APPLY_TYPES 上扩展） */
 
 APPLY_TYPES.appeal = {
