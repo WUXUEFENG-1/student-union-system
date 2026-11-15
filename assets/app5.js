@@ -513,7 +513,7 @@ function buildZip(files) {
     cv.setUint16(32, 0, true);
     cv.setUint16(34, 0, true);
     cv.setUint16(36, 0, true);
-    cv.setUint16(38, 0, true);
+    cv.setUint32(38, 0, true);
     cv.setUint32(42, localOffset, true);
     central.push(ch, name);
     offset += 30 + name.length + data.length;
