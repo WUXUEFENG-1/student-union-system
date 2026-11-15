@@ -80,7 +80,8 @@ APPLY_TYPES.election = {
     { key: 'manifesto', label: '竞选宣言', type: 'textarea' },
     { key: 'workBrief', label: '学生会工作简述', type: 'textarea' },
     { key: 'awards', label: '评优获奖佐证材料' },
-    { key: 'obey', label: '是否服从岗位调剂', type: 'select', options: ['是', '否'] }
+    { key: 'obey', label: '是否服从岗位调剂', type: 'select', options: ['是', '否'] },
+    { key: 'photo', type: 'hidden' }
   ]
 };
 
@@ -145,6 +146,18 @@ openForm = function (opts) {
     };
   }
   if (opts && opts.title === '换届竞选报名') {
+    const photoField = document.createElement('div');
+    photoField.className = 'field';
+    photoField.innerHTML = '<label>一寸证件照（上传后自动填入申请表照片位）</label><input type="file" id="elPhoto" accept="image/png,image/jpeg,image/jpg" class="file-input">';
+    body.appendChild(photoField);
+    body.querySelector('#elPhoto').onchange = (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      if (f.size > 512 * 1024) { toast('证件照请控制在 512KB 以内'); return; }
+      const rd = new FileReader();
+      rd.onload = () => { const h = body.querySelector('#f_photo'); if (h) h.value = rd.result; };
+      rd.readAsDataURL(f);
+    };
     const origSubmit = modalSubmit;
     modalSubmit = function () {
       if (!electionOpenNow()) { toast('换届竞选报名尚未开放，请等待主席团开放报名时段'); return; }
@@ -376,10 +389,11 @@ function electionProofHtml(a) {
   const op = (stages) => stages.map((s) => opinionOf(a, s)).filter(Boolean).join('；') || '—';
   const cell = (t) => `<td style="border:1px solid #333;padding:6px 10px">${esc(t || '—')}</td>`;
   const lab = (t) => `<td style="border:1px solid #333;padding:6px 10px;background:#f2f5fa;font-weight:600">${esc(t)}</td>`;
+  const photoCell = v.photo ? `<img src="${v.photo}" style="width:100%;height:100%;object-fit:cover;display:block">` : '一寸照';
   return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:14pt;max-width:760px;margin:0 auto;padding:24px">
     <h2 style="text-align:center;margin:0 0 20px">应用经济系学生会换届报名申请表</h2>
     <table style="width:100%;border-collapse:collapse">
-      <tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}<td rowspan="3" style="border:1px solid #333;width:120px;text-align:center;vertical-align:middle">一寸照</td></tr>
+      <tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}<td rowspan="3" style="border:1px solid #333;width:120px;height:150px;text-align:center;vertical-align:middle">${photoCell}</td></tr>
       <tr>${lab('学号')}${cell(a.sno)}${lab('联系方式')}${cell(p.phone)}</tr>
       <tr>${lab('班级')}${cell(a.class)}${lab('民族')}${cell(p.ethnicity)}</tr>
       <tr>${lab('政治面貌')}${cell(p.politics)}${lab('竞选岗位')}${cell(v.title)}<td></td></tr>
