@@ -122,18 +122,35 @@ function genericApprove(a) {
   toast(last ? '申请已通过' : '已流转至下一审批节点');
 }
 
+/* 节点审批权限：管理员/主席团/责任教师可审批后续节点；部长仅能审批第一节点，不可代审 */
+function canApprove(a) {
+  if (allPower()) return true;
+  if (cur.role === 'minister') return a.stage === 0;
+  return false;
+}
+
 function openApproveForm(a) {
   const cfg = APPLY_TYPES[a.type];
   const stageLabel = cfg.stages[a.stage] || '';
-  let signData = '';
+  let signFile = '';
+  let canvasDirty = false;
   const body = openForm({
     title: stageLabel + ' · ' + a.name,
-    hint: '请上传本人手写签字并填写联系电话，确认后通过审批。',
+    hint: '请在下方手写签字（或上传签字图片），并填写联系电话，确认后通过审批。',
     fields: [{ key: 'phone', label: '联系电话', required: true }],
-    extra: '<div class="field"><label>签字图片（上传手写签字）</label><input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input"></div>',
+    extra: `
+      <div class="field"><label>手写签字（可直接在线书写，或点“选择文件”上传签字图片）</label>
+        <canvas id="apCanvas" width="320" height="120" style="border:1px solid #d9e2ec;border-radius:8px;background:#fff;touch-action:none"></canvas>
+        <div class="row-actions" style="margin-top:8px">
+          <button type="button" class="link-btn" id="apClear">清除重写</button>
+          <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
+        </div>
+      </div>`,
     onSubmit(d) {
+      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
       const signs = (a.approveSigns = a.approveSigns || []);
-      signs.push({ sign: signData || '', phone: d.phone, actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel, time: today() });
+      signs.push({ sign: signData, phone: d.phone, actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel, time: today() });
       if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = d.phone; }
       else { a.signChair = signData; a.phoneChair = d.phone; }
       const last = a.stage >= cfg.stages.length - 1;
@@ -145,12 +162,22 @@ function openApproveForm(a) {
       toast(last ? '申请已通过' : '已流转至下一审批节点');
     }
   });
+  const cv = body.querySelector('#apCanvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return { x: p.clientX - r.left, y: p.clientY - r.top }; };
+  cv.addEventListener('pointerdown', (e) => { drawing = true; canvasDirty = true; ctx.beginPath(); const p = pos(e); ctx.moveTo(p.x, p.y); });
+  cv.addEventListener('pointermove', (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke(); });
+  const stop = () => { drawing = false; };
+  cv.addEventListener('pointerup', stop);
+  cv.addEventListener('pointerleave', stop);
+  body.querySelector('#apClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); canvasDirty = false; };
   body.querySelector('#apSign').onchange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
     if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
     const rd = new FileReader();
-    rd.onload = () => { signData = rd.result; };
+    rd.onload = () => { signFile = rd.result; };
     rd.readAsDataURL(f);
   };
 }
@@ -161,6 +188,7 @@ function rebindApprovePass() {
     btn.onclick = () => {
       const a = db.applies.find((x) => x.id === btn.dataset.applyPass);
       if (!a) return;
+      if (!canApprove(a)) { toast('当前节点无权审批'); return; }
       if (a.type === 'publicLeave') openApproveForm(a);
       else genericApprove(a);
     };
@@ -183,6 +211,39 @@ render = function () {
       if (tds.length > th && tds[0].textContent.trim() === '') tds[0].remove();
     });
   });
+  // 部长仅能审批第一节点；已流转到主席团/教师节点的记录不再出现在部长待办
+  if (cur.role === 'minister') {
+    document.querySelectorAll('.card').forEach((card) => {
+      const h2 = card.querySelector('h2');
+      if (h2 && h2.textContent.includes('待我审批')) {
+        card.querySelectorAll('tbody tr').forEach((tr) => {
+          const btn = tr.querySelector('[data-apply-pass],[data-apply-reject]');
+          const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyPass || btn.dataset.applyReject));
+          if (a && a.stage > 0) tr.remove();
+        });
+      }
+    });
+  }
+  // 部门信息表 / 人员信息表：非主席团、管理员、责任教师仅可见本部门
+  if (!allPower()) {
+    document.querySelectorAll('.card').forEach((card) => {
+      const h2 = card.querySelector('h2');
+      if (!h2) return;
+      const title = h2.textContent.trim();
+      if (title === '部门信息表') {
+        card.querySelectorAll('tbody tr').forEach((tr) => {
+          const dept = tr.querySelector('td strong');
+          if (dept && dept.textContent.trim() !== cur.dept) tr.remove();
+        });
+      } else if (title === '人员信息表') {
+        card.querySelectorAll('tbody tr').forEach((tr) => {
+          const badge = tr.querySelector('.badge.blue');
+          const dept = badge ? badge.textContent.trim() : '';
+          if (dept && dept !== cur.dept) tr.remove();
+        });
+      }
+    });
+  }
   rebindApprovePass();
 };
 
