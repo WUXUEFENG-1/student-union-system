@@ -8,40 +8,25 @@ const SYSTEM = {
 
 const ROLE_NAMES = {
   admin: '管理员',
+  teacher: '责任教师',
   presidium: '主席团',
   minister: '部长团',
   student: '普通学生'
 };
 
 const DEPTS = ['主席团', '秘书部', '宣传部', '实践部', '权益服务部'];
-const TITLES = ['主席', '副主席', '部长', '副部长', '成员'];
+const TITLES = ['主席', '副主席', '部长', '副部长', '干事', '成员'];
 
 const ACCOUNTS = [
   { username: 'admin', password: '123456', name: '系统管理员', role: 'admin', dept: '系统', title: '管理员', sno: '—', class: '—', phone: '', gender: '—', ethnicity: '汉族', politics: '系统' },
-  { username: 'president', password: '123456', name: '吴雪枫', role: 'presidium', dept: '主席团', title: '主席', sno: '20240001', class: '2024级计算机网络技术2班', phone: '138****6621', gender: '男', ethnicity: '汉族', politics: '中共预备党员' },
-  { username: 'vice', password: '123456', name: '李思远', role: 'presidium', dept: '主席团', title: '副主席', sno: '20240012', class: '2024级大数据技术1班', phone: '139****3308', gender: '男', ethnicity: '汉族', politics: '共青团员' },
-  { username: 'minister', password: '123456', name: '陈雨桐', role: 'minister', dept: '宣传部', title: '部长', sno: '20240023', class: '2024级电子商务1班', phone: '137****9915', gender: '女', ethnicity: '汉族', politics: '共青团员' },
-  { username: 'vminister', password: '123456', name: '王浩然', role: 'minister', dept: '宣传部', title: '副部长', sno: '20240024', class: '2024级电子商务2班', phone: '135****2210', gender: '男', ethnicity: '汉族', politics: '共青团员' },
-  { username: 'student', password: '123456', name: '林小满', role: 'student', dept: '未加入', title: '学生', sno: '20260035', class: '2026级经济管理1班', phone: '138****3321', gender: '女', ethnicity: '汉族', politics: '共青团员' }
+  { username: 'teacher', password: '123456', name: '指导教师', role: 'teacher', dept: '系统', title: '责任教师', sno: '—', class: '—', phone: '', gender: '—', ethnicity: '汉族', politics: '系统' }
 ];
 
 const SEED = {
   accounts: ACCOUNTS,
 
-  /* ④ 人员信息表 */
-  members: [
-    { id: 'm1', name: '吴雪枫', sno: '20240001', class: '2024级计算机网络技术2班', dept: '主席团', title: '主席', phone: '138****6621', gender: '男', ethnicity: '汉族', politics: '中共预备党员', status: '在任', joined: '2026-09-01' },
-    { id: 'm2', name: '李思远', sno: '20240012', class: '2024级大数据技术1班', dept: '主席团', title: '副主席', phone: '139****3308', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-01' },
-    { id: 'm3', name: '孙嘉禾', sno: '20240045', class: '2024级市场营销2班', dept: '秘书部', title: '部长', phone: '188****7610', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
-    { id: 'm4', name: '陈雨桐', sno: '20240023', class: '2024级电子商务1班', dept: '宣传部', title: '部长', phone: '137****9915', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
-    { id: 'm5', name: '王浩然', sno: '20240024', class: '2024级电子商务2班', dept: '宣传部', title: '副部长', phone: '135****2210', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-03' },
-    { id: 'm6', name: '黄婉清', sno: '20240067', class: '2024级连锁经营管理1班', dept: '实践部', title: '部长', phone: '176****0192', gender: '女', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-08' },
-    { id: 'm7', name: '赵一鸣', sno: '20240034', class: '2024级会计1班', dept: '权益服务部', title: '部长', phone: '150****2244', gender: '男', ethnicity: '汉族', politics: '共青团员', status: '在任', joined: '2026-09-05' },
-    { id: 'm8', name: '杨梦洁', sno: '20250052', class: '2025级文秘1班', dept: '宣传部', title: '成员', phone: '156****1102', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-20' },
-    { id: 'm9', name: '马晨阳', sno: '20250041', class: '2025级电子商务2班', dept: '实践部', title: '成员', phone: '152****8877', gender: '男', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-15' },
-    { id: 'm10', name: '刘思彤', sno: '20250063', class: '2025级会计2班', dept: '权益服务部', title: '成员', phone: '189****0921', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-20' },
-    { id: 'm11', name: '何佳颖', sno: '20250033', class: '2025级市场营销1班', dept: '宣传部', title: '成员', phone: '187****3344', gender: '女', ethnicity: '汉族', politics: '群众', status: '在任', joined: '2026-09-15' }
-  ],
+  /* 成员台账：初始化默认为空表，真实成员由信息收集解析或手工导入建立 */
+  members: [],
 
   /* ① 部门信息表 */
   departments: [
@@ -61,7 +46,7 @@ const SEED = {
   /* ③ 活动信息表 */
   activities: [
     { id: 'a1', title: '第三届青春杯篮球赛', dept: '权益服务部', collaborators: [{ dept: '宣传部', count: 3 }, { dept: '实践部', count: 6 }], total: 36, start: '2026-11-20 09:00', end: '2026-11-20 17:00', place: '学院篮球场', content: '班级组队参赛，淘汰赛制，设冠亚季军。', status: '已通过', approver: '主席团', reason: '' },
-    { id: 'a2', title: '长征精神主题演讲比赛', dept: '宣传部', collaborators: [{ dept: '秘书部', count: 4 }], total: 24, start: '2026-11-25 14:00', end: '2026-11-25 17:30', place: '教学楼报告厅', content: '初赛与决赛两轮，评委由主席团担任。', status: '待审批', approver: '', reason: '' },
+    { id: 'a2', title: '长征精神主题演讲比赛', dept: '宣传部', collaborators: [{ dept: '秘书部', count: 4 }], total: 24, start: '2026-11-25 14:00', end: '2026-11-25 17:30', place: '教学楼报告厅', content: '初赛与决赛两轮，评委由主席团担任。', status: '待主席团审核', approver: '', reason: '' },
     { id: 'a3', title: '国家网络安全宣传周反诈宣传', dept: '宣传部', collaborators: [{ dept: '实践部', count: 5 }], total: 18, start: '2026-11-16 10:00', end: '2026-11-16 16:00', place: '学院广场', content: '反诈知识问答、宣传短片拍摄与志愿者招募。', status: '已通过', approver: '部长团', reason: '' },
     { id: 'a4', title: '新成员业务培训会', dept: '秘书部', collaborators: [], total: 30, start: '2026-11-14 18:30', end: '2026-11-14 20:30', place: '学生会办公室', content: '制度学习、公文写作、办公软件实操。', status: '已驳回', approver: '主席团', reason: '与学院晚课冲突，建议改期' }
   ],
@@ -98,6 +83,9 @@ const SEED = {
     { id: 'p1', name: '杨梦洁', action: '提升', from: '成员', to: '宣传部成员（小组长）', operator: '陈雨桐', date: '2026-11-08' },
     { id: 'p2', name: '马晨阳', action: '提升', from: '成员', to: '实践部部长', operator: '吴雪枫', date: '2026-11-02' }
   ],
+
+  /* 我的申请：部门调整/调动、退会、意见反馈、述职、换届竞选、任职证明、志愿认定等通用台账 */
+  applies: [],
 
   /* 线上信息收集 */
   collects: [
