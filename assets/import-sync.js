@@ -23,7 +23,7 @@ importMembers = function (text) {
     if (name === '姓名' || sno === '学号') { skipped++; return; }
     const deptName = dept || '未加入';
     const titleName = normalizeTitle(titleLabel);
-    const profile = { name, sno: class: cls || '—', dept: deptName, title: titleName, phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '' };
+    const profile = { name, sno, class: cls || '—', dept: deptName, title: titleName, phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '' };
     let mem = db.members.find((m) => m.sno === sno) || db.members.find((m) => m.name === name && m.sno === sno);
     if (mem) {
       Object.assign(mem, profile, { status: mem.status || '在任' });
@@ -37,7 +37,7 @@ importMembers = function (text) {
       if (account) {
         if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未重复创建`); }
         else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
-        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno: class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
       }
       added++;
     }
