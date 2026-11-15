@@ -153,7 +153,7 @@ openForm = function (opts) {
     body.querySelector('#elPhoto').onchange = (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      if (f.size > 512 * 1024) { toast('证件照请控制在 512KB 以内'); return; }
+      if (f.size > 5 * 1024 * 1024) { toast('证件照请控制在 5MB 以内'); return; }
       const rd = new FileReader();
       rd.onload = () => { const h = body.querySelector('#f_photo'); if (h) h.value = rd.result; };
       rd.readAsDataURL(f);
