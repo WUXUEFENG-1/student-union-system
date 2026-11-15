@@ -14,7 +14,7 @@ const ROLE_NAMES = {
   student: '普通学生'
 };
 
-const DEPTS = ['主席团', '秘书部', '宣传部', '实践部', '权益服务部'];
+const DEPTS = ['主席团', '秘书部', '宣传部', '文体部', '权益服务部'];
 const TITLES = ['主席', '副主席', '部长', '副部长', '干事', '成员'];
 
 const ACCOUNTS = [
@@ -33,7 +33,7 @@ const SEED = {
     { id: 'd1', name: '主席团', leader: '吴雪枫', desc: '统筹全系学生会工作，审批活动与部门事务，负责对外联络。', status: '正常' },
     { id: 'd2', name: '秘书部', leader: '孙嘉禾', desc: '会议记录、档案管理、制度汇编与跨部门协调。', status: '正常' },
     { id: 'd3', name: '宣传部', leader: '陈雨桐', desc: '海报设计、公众号运营、活动影像记录。', status: '正常' },
-    { id: 'd4', name: '实践部', leader: '黄婉清', desc: '志愿服务、社会实践、校企对接与活动执行。', status: '正常' },
+    { id: 'd4', name: '文体部', leader: '王槿榆', desc: '文艺体育活动组织、赛事策划与日常文体活动开展。', status: '正常' },
     { id: 'd5', name: '权益服务部', leader: '赵一鸣', desc: '学生权益维护、意见反馈、文体活动组织。', status: '正常' }
   ],
 
