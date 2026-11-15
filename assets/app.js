@@ -25,16 +25,16 @@ const MENU = {
   admin: [
     ['dashboard', '工作台'], ['monitor', '系统监测'], ['logs', '操作日志'], ['activity', '活动审批'],
     ['personnel', '人事管理'], ['accounts', '账号管理'], ['dept', '部门审核'], ['assess', '考核管理'], ['notice', '通知管理'],
-    ['leave', '请假审批'], ['join', '加入申请'], ['collect', '信息收集'], ['event', '活动报名'], ['profile', '个人信息']
+    ['leave', '请假审批'], ['join', '我的申请'], ['collect', '信息收集'], ['event', '活动报名'], ['profile', '个人信息']
   ],
   presidium: [
     ['dashboard', '工作台'], ['activity', '活动审批'], ['personnel', '人事管理'], ['dept', '部门管理'],
-    ['assess', '考核管理'], ['notice', '通知管理'], ['leave', '请假管理'], ['join', '加入申请'],
+    ['assess', '考核管理'], ['notice', '通知管理'], ['leave', '请假管理'], ['join', '我的申请'],
     ['collect', '信息收集'], ['event', '活动报名'], ['profile', '个人信息']
   ],
   minister: [
     ['dashboard', '工作台'], ['dept', '部门信息'], ['activity', '活动管理'], ['assess', '成员考核'],
-    ['leave', '请假管理'], ['join', '加入申请'], ['notice', '通知管理'], ['collect', '信息收集'],
+    ['leave', '请假管理'], ['join', '我的申请'], ['notice', '通知管理'], ['collect', '信息收集'],
     ['event', '活动报名'], ['attendance', '考勤签到'], ['asset', '物资借还'], ['profile', '个人信息']
   ],
   student: [
@@ -42,6 +42,8 @@ const MENU = {
     ['leave', '我的请假'], ['event', '活动报名'], ['collect', '信息上传'], ['profile', '个人信息']
   ]
 };
+/* 责任教师与管理员拥有相同后台菜单，可查看操作任一模块，操作记录单独标识 */
+MENU.teacher = MENU.admin.slice();
 
 const PAGE_META = {
   dashboard: ['工作台', '今日待办与审批概览'],
@@ -54,7 +56,7 @@ const PAGE_META = {
   assess: ['考核管理', '按层级开展任务完成度考核'],
   notice: ['通知公告', '通知的发布与撤回'],
   leave: ['请假管理', '请假申请与逐级审核'],
-  join: ['加入申请', '普通学生入会申请与审核'],
+  join: ['我的申请', '部门调整/调动、退会、反馈、述职、竞选、任职证明、志愿认定等申请'],
   attendance: ['考勤签到', '例会签到与出勤统计（部长团附加）'],
   asset: ['物资借还', '物资台账与借还登记（部长团附加）'],
   profile: ['个人信息', '资料维护、密码修改与权限说明']
@@ -69,6 +71,16 @@ function roleFromTitle(title) {
   if (['主席', '副主席'].includes(title)) return 'presidium';
   if (['部长', '副部长'].includes(title)) return 'minister';
   return 'student';
+}
+/* 职务归一化：兼容「主席 / 副主席 / 秘书部部长 / 文体部副部长 / 宣传部长」等带部门前缀的写法 */
+function normalizeTitle(raw) {
+  const t = String(raw || '').trim();
+  if (/副主席/.test(t)) return '副主席';
+  if (/主席/.test(t)) return '主席';
+  if (/副部长/.test(t)) return '副部长';
+  if (/部长/.test(t)) return '部长';
+  if (/成员|干事/.test(t)) return '成员';
+  return TITLES.includes(t) ? t : '成员';
 }
 function matchMember(db, acc) {
   return (db.members || []).find((m) => m.account === acc.username)
@@ -86,7 +98,7 @@ function normalize(db) {
       if (mem.dept) a.dept = mem.dept;
       ['gender', 'ethnicity', 'politics', 'class', 'phone', 'sno'].forEach((k) => { if (mem[k] && mem[k] !== '—') a[k] = mem[k]; });
     }
-    if (a.role !== 'admin') a.role = roleFromTitle(a.title);
+    if (!['admin', 'teacher'].includes(a.role)) a.role = roleFromTitle(a.title);
   });
   (db.members || []).forEach((m) => {
     m.gender = m.gender || ''; m.ethnicity = m.ethnicity || '汉族'; m.politics = m.politics || '';
@@ -126,16 +138,36 @@ function commit(action, detail) { log(action, detail); save(); }
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const today = () => new Date().toISOString().slice(0, 10);
-const allPower = () => ['admin', 'presidium'].includes(cur.role);
-const isPublisher = () => ['admin', 'presidium', 'minister'].includes(cur.role);
+const allPower = () => ['admin', 'teacher', 'presidium'].includes(cur.role);
+const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes(cur.role);
 
 function tone(status) {
-  if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中'].includes(status)) return 'green';
-  if (['待审核', '待审批', '待管理员审核', '借出'].includes(status)) return 'amber';
-  if (['已驳回', '已罢免', '离任', '已截止'].includes(status)) return 'red';
+  if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
+  if (['待审核', '待审批', '待管理员审核', '待主席团审核', '待教师审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
+  if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销'].includes(status)) return 'red';
   return 'gray';
 }
 function badge(text) { return `<span class="badge ${tone(text)}">${esc(text)}</span>`; }
+
+/* 考核百分制固定四维：出勤30 / 工作任务40 / 思想纪律15 / 群众评价15 */
+const ASSESS_DIMS = [
+  { key: 'attend', name: '出勤', max: 30 },
+  { key: 'task', name: '工作任务', max: 40 },
+  { key: 'disc', name: '思想纪律', max: 15 },
+  { key: 'peer', name: '群众评价', max: 15 }
+];
+function gradeOf(score) {
+  const s = Number(score) || 0;
+  if (s >= 90) return '优秀';
+  if (s >= 80) return '良好';
+  if (s >= 60) return '合格';
+  return '不合格';
+}
+function gradeBadge(score) {
+  const g = gradeOf(score);
+  const color = g === '优秀' ? 'green' : g === '良好' ? 'blue' : g === '合格' ? 'amber' : 'red';
+  return `<span class="badge ${color}">${g}</span>`;
+}
 
 function toast(msg) {
   const el = $('#toast');
@@ -308,7 +340,7 @@ function enterApp(acc) {
       if (mem[k] != null && mem[k] !== '' && mem[k] !== '—') cur[k] = mem[k];
     });
   }
-  if (cur.role !== 'admin') cur.role = roleFromTitle(cur.title);
+  if (!['admin', 'teacher'].includes(cur.role)) cur.role = roleFromTitle(cur.title);
   /* 把校正后的身份与档案回写账号记录，保证菜单、工作台一致 */
   const rec = db.accounts.find((a) => a.username === acc.username);
   if (rec) Object.assign(rec, {
@@ -399,10 +431,8 @@ function pendingTasks() {
     const l = db.leaves.filter((x) => x.status === '待审核' && x.reviewer === leaveReviewer).length;
     if (l) t.push(['请假待审核', l, 'leave']);
   }
-  if (cur.role === 'minister') {
-    const j = db.joinRequests.filter((x) => x.dept === cur.dept && x.status === '待审核').length;
-    if (j) t.push(['入会申请待审核', j, 'join']);
-  }
+  const ap = (db.applies || []).filter((x) => ['待审核', '审核中', '待分派', '处理中'].includes(x.status)).length;
+  if (ap && (allPower() || cur.role === 'minister')) t.push(['申请待审批', ap, 'join']);
   const todo = db.collects.filter((c) => c.status === '进行中' && !c.submissions.some((s) => s.name === cur.name)).length;
   if (todo && cur.role === 'student') t.push(['待填写信息收集', todo, 'collect']);
   return t;
@@ -415,9 +445,10 @@ function renderDashboard() {
 
   const roleBrief = {
     admin: '管理员拥有全部权限，并可查看系统监测数据与操作日志。',
+    teacher: '责任教师拥有全部后台权限，参与活动终审、考核配置与全系统台账导出，操作记录单独标识。',
     presidium: '主席、副主席拥有全部权限：审批活动与请假、任免成员、管理部门、考核部长、发布收集与报名。',
-    minister: '您可维护本部门信息与成员、申请活动、考核部内成员、审批请假与入会申请、发布收集与活动报名。',
-    student: '您可查看部门信息、申请加入部门、提交请假、报名活动、填写信息收集表。'
+    minister: '您可维护本部门信息与成员、申请活动、考核部内成员、审批请假与各类申请、发布收集与活动报名。',
+    student: '您可查看部门信息、提交各类申请、请假、报名活动、填写信息收集表。'
   };
 
   $('#views').innerHTML = `
@@ -468,7 +499,7 @@ function renderMonitor() {
   const tableStats = [
     ['账号', db.accounts.length], ['成员', db.members.length], ['部门', db.departments.length],
     ['活动', db.activities.length], ['通知', db.notices.length], ['请假', db.leaves.length],
-    ['考核', db.assessments.length], ['入会申请', db.joinRequests.length],
+    ['考核', db.assessments.length], ['历史入会', db.joinRequests.length], ['我的申请', (db.applies || []).length],
     ['信息收集', db.collects.length], ['收集提交', db.collects.reduce((s, c) => s + c.submissions.length, 0)],
     ['活动报名', db.events.length], ['报名人次', db.events.reduce((s, e) => s + e.signups.length, 0)],
     ['操作日志', (db.logs || []).length]
