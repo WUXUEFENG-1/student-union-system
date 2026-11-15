@@ -96,7 +96,7 @@ function normalize(db) {
       mem.account = mem.account || a.username;
       if (mem.title) a.title = mem.title;
       if (mem.dept) a.dept = mem.dept;
-      ['gender', 'ethnicity', 'politics', 'class', 'phone', 'sno'].forEach((k) => { if (mem[k] && mem[k] !== '—') a[k] = mem[k]; });
+      ['gender', 'ethnicity', 'politics', 'class', 'major', 'phone', 'sno'].forEach((k) => { if (mem[k] && mem[k] !== '—') a[k] = mem[k]; });
     }
     if (!['admin', 'teacher'].includes(a.role)) a.role = roleFromTitle(a.title);
   });
@@ -144,7 +144,7 @@ const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes
 function tone(status) {
   if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
   if (['待审核', '待审批', '待管理员审核', '待主席团审核', '待教师审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
-  if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销'].includes(status)) return 'red';
+  if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销', '已作废'].includes(status)) return 'red';
   return 'gray';
 }
 function badge(text) { return `<span class="badge ${tone(text)}">${esc(text)}</span>`; }
@@ -341,7 +341,7 @@ function enterApp(acc) {
   /* 同步成员档案（不含密码），并按职务校正登录身份 */
   const mem = matchMember(db, acc);
   if (mem) {
-    ['name', 'gender', 'ethnicity', 'politics', 'class', 'phone', 'dept', 'title', 'sno'].forEach((k) => {
+    ['name', 'gender', 'ethnicity', 'politics', 'class', 'major', 'phone', 'dept', 'title', 'sno'].forEach((k) => {
       if (mem[k] != null && mem[k] !== '' && mem[k] !== '—') cur[k] = mem[k];
     });
   }
@@ -350,7 +350,7 @@ function enterApp(acc) {
   const rec = db.accounts.find((a) => a.username === acc.username);
   if (rec) Object.assign(rec, {
     role: cur.role, name: cur.name, dept: cur.dept, title: cur.title, sno: cur.sno,
-    class: cur.class, phone: cur.phone, gender: cur.gender, ethnicity: cur.ethnicity, politics: cur.politics
+    class: cur.class, major: cur.major, phone: cur.phone, gender: cur.gender, ethnicity: cur.ethnicity, politics: cur.politics
   });
 
   $('#loginPage').classList.add('hidden');
