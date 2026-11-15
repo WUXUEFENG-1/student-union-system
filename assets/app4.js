@@ -146,7 +146,7 @@ function applyApproved(a) {
 /* ---------------- 活动公假证明：模板回填与导出 ---------------- */
 const DEFAULT_PL_TEMPLATE = {
   title: '应用经济系学生会证明',
-  body: '尊敬的辅导员、班主任、各位科任老师：\n兹有{专业}{班级}学生{姓名}，学号：{学号}，系我系学生会成员。\n该同学将于{活动起止时间}，参加由本系学生会组织的{活动名称}活动，活动地点为：{活动地点}。\n因参加本系学生会组织的正式活动，需请假{请假课程及日期}，活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。{申请说明}\n特此证明，请老师予以批准。'
+  body: '兹有{专业}{班级}学生{姓名}，学号：{学号}，是我系学生会{所属部门}成员，于{活动起止时间}在{活动地点}参加「{活动名称}」活动。\n因参加本次活动，需请假课程为：{请假课程及日期}。\n活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。{申请说明}\n特此证明。'
 };
 function plTemplate() { return (db.templates && db.templates.publicLeave) || DEFAULT_PL_TEMPLATE; }
 function cnDate(s) {
@@ -159,22 +159,30 @@ function plProofHtml(a) {
   const map = {
     '{姓名}': a.name, '{学号}': a.sno || '—', '{专业}': a.major || '—', '{班级}': a.class || '—',
     '{所属部门}': a.dept || '—', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
-    '{活动地点}': v.place || '—', '{请假课程及日期}': v.courses || '—', '{申请说明}': v.explanation || '—',
+    '{活动地点}': v.place || '—', '{请假课程及日期}': v.courses || '—', '{申请说明}': v.explanation || '',
     '{联系电话}': v.phone || '—', '{申请份数与用途}': v.copiesPurpose || '—',
     '{证明编号}': a.proofNo || '—', '{出具日期}': cnDate(a.approvedAt)
   };
   let body = plTemplate().body;
   Object.keys(map).forEach((k) => { body = body.split(k).join(String(map[k] == null ? '—' : map[k])); });
   const lines = esc(body).split('\n');
-  const paras = lines.map((ln, i) => `<p style="margin:0 0 ${i === 0 ? '18px' : '12px'};${i === 0 ? '' : 'text-indent:2em'}">${ln}</p>`).join('');
-  return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:16pt;line-height:1.9;max-width:760px;margin:0 auto;padding:32px 24px">
-    <h2 style="text-align:center;font-size:18pt;font-weight:bold;margin:0 0 28px">${esc(plTemplate().title || '证明')}</h2>
+  const paras = lines.map((ln) => `<p style="margin:0 0 12px;text-indent:2em">${ln}</p>`).join('');
+  const signs = a.approveSigns || [];
+  const minister = signs.find((s) => /部长审核/.test(s.action || '')) || signs[0];
+  const chair = signs.find((s) => !/部长审核/.test(s.action || '')) || signs[signs.length - 1];
+  const signPair = (s) => {
+    const img = s && s.sign ? `<img src="${s.sign}" style="height:30px;vertical-align:middle">` : '____________';
+    const ph = s && s.phone ? esc(s.phone) : '____________';
+    return `${img}　　联系电话：${ph}`;
+  };
+  return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:16pt;line-height:28pt;max-width:760px;margin:0 auto;padding:32px 24px">
+    <h2 style="text-align:center;font-size:18pt;font-weight:bold;margin:0 0 28px;line-height:28pt">${esc(plTemplate().title || '证明')}</h2>
     ${paras}
-    <div style="margin-top:40px;padding-left:2em">
-      <p style="margin:0 0 18px">负责人签字：____________</p>
-      <p style="margin:0 0 18px">联系电话：${esc(map['{联系电话}'])}</p>
-      <p style="margin:0 0 18px">日期：${esc(map['{出具日期}'])}</p>
-      <p style="margin:0 0 18px">编号：${esc(a.proofNo || '—')}</p>
+    <div style="margin-top:36px">
+      <p style="margin:0 0 16px">部长签字：${signPair(minister)}</p>
+      <p style="margin:0 0 16px">负责人签字：${signPair(chair)}</p>
+      <p style="margin:0 0 16px;text-align:right">日期：${esc(map['{出具日期}'])}</p>
+      <p style="margin:0 0 16px">证明编号：${esc(a.proofNo || '—')}</p>
     </div>
   </div>`;
 }
