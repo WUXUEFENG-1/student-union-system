@@ -273,18 +273,15 @@ tr:hover td { background: #fafcff; }
   box-shadow: 0 10px 26px rgba(11,37,69,.3);
 }
 
-/* ================= 应用标识（单学字） ================= */
+/* ================= 应用标识（校徽图） ================= */
 .logo-badge {
   width: 38px; height: 38px; border-radius: 50%; flex: 0 0 38px;
-  background: #1657a6;
+  background: #fff;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line); overflow: hidden;
 }
-.logo-badge::before {
-  content: '学'; color: #fff; font-weight: 700; font-size: 20px; line-height: 1;
-}
+.logo-badge img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
 .logo-badge.big { width: 54px; height: 54px; flex: 0 0 54px; }
-.logo-badge.big::before { font-size: 28px; }
 
 
 
