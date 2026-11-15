@@ -1,21 +1,5 @@
 /* ================= app6：退会申请补丁层（叠加在 app5 之上） ================= */
 
-/* 版本标识：用于确认安装/加载的是最新退会签名版 */
-(function markAppVersion() {
-  const VERSION = 'v1.3';
-  const paint = () => {
-    const card = document.querySelector('#loginPage .login-card');
-    if (!card || document.getElementById('appVerTag')) return;
-    const p = document.createElement('p');
-    p.id = 'appVerTag';
-    p.style.cssText = 'margin:10px 0 0;font-size:12px;color:#8b9bb0;text-align:center';
-    p.textContent = VERSION + ' · 退会申请（手写签字 / Word / PDF）';
-    card.appendChild(p);
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', paint);
-  else paint();
-})();
-
 /* 退会申请：四级签字流程，与换届竞选一致 */
 APPLY_TYPES.leaveclub = {
   name: '退会申请',
@@ -264,28 +248,86 @@ function bindResignExport() {
 }
 
 const _render6 = render;
-render = function () {
-  _render6();
-  if (cur.role !== 'minister' && cur.role !== 'presidium') {
-    bindResignExport();
-    return;
-  }
+
+/* 四级岗位 ↔ 审批节点顺序：副部长 → 部长 → 副主席 → 主席 */
+const STAGE_TITLE6 = ['副部长', '部长', '副主席', '主席'];
+
+/* 当前用户是否可见这条四级待办（岗位与节点严格一一对应） */
+function resignTodoVisible(a) {
+  if (!FOUR_LEVEL_TYPES.includes(a.type)) return true;
+  if (cur.role === 'admin') return true;
+  return STAGE_TITLE6[a.stage] === (cur.title || '');
+}
+
+/* 重绑四级审批的通过 / 驳回按钮：岗位不符的直接移除，避免跨级操作 */
+function bindResignActions() {
+  document.querySelectorAll('[data-apply-pass]').forEach((btn) => {
+    const a = (db.applies || []).find((x) => x.id === btn.dataset.applyPass);
+    if (!a || !FOUR_LEVEL_TYPES.includes(a.type)) return;
+    if (!canApprove(a)) { btn.remove(); return; }
+    btn.onclick = () => openApproveForm(a);
+  });
+  document.querySelectorAll('[data-apply-reject]').forEach((btn) => {
+    const a = (db.applies || []).find((x) => x.id === btn.dataset.applyReject);
+    if (!a || !FOUR_LEVEL_TYPES.includes(a.type)) return;
+    if (!canApprove(a)) { btn.remove(); return; }
+    btn.onclick = () => {
+      openForm({
+        title: '驳回申请 · ' + a.name,
+        fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
+        onSubmit(d) {
+          a.status = '已驳回';
+          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
+          commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`);
+          save(); render(); toast('已驳回申请');
+        }
+      });
+    };
+  });
+}
+
+/* 待我审批列表：移除当前岗位无权处理的行，并把副标题计数改成剩余条数 */
+function filterResignTodo() {
   document.querySelectorAll('.card').forEach((card) => {
     const h2 = card.querySelector('h2');
     if (!h2 || !h2.textContent.includes('待我审批')) return;
     const tbody = card.querySelector('tbody');
     if (!tbody) return;
-    db.applies.forEach((a) => {
-      if (a.type !== 'leaveclub') return;
-      if (!['待审核', '审核中', '待分派', '处理中'].includes(a.status)) return;
-      if (tbody.querySelector(`[data-apply-view="${a.id}"]`)) return;
-      if (!canApprove(a)) return;
-      tbody.insertAdjacentHTML('beforeend', resignRow(a));
+    let kept = 0;
+    tbody.querySelectorAll('tr').forEach((tr) => {
+      const btn = tr.querySelector('[data-apply-view],[data-apply-pass],[data-apply-reject]');
+      const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyView || btn.dataset.applyPass || btn.dataset.applyReject));
+      if (!a) return;
+      if (!resignTodoVisible(a)) { tr.remove(); return; }
+      kept += 1;
     });
+    const sub = card.querySelector('.sub');
+    if (sub) sub.textContent = `共 ${kept} 条待处理申请`;
   });
+}
+
+render = function () {
+  _render6();
+  if (cur.role === 'minister' || cur.role === 'presidium') {
+    document.querySelectorAll('.card').forEach((card) => {
+      const h2 = card.querySelector('h2');
+      if (!h2 || !h2.textContent.includes('待我审批')) return;
+      const tbody = card.querySelector('tbody');
+      if (!tbody) return;
+      db.applies.forEach((a) => {
+        if (a.type !== 'leaveclub') return;
+        if (!['待审核', '审核中', '待分派', '处理中'].includes(a.status)) return;
+        if (tbody.querySelector(`[data-apply-view="${a.id}"]`)) return;
+        if (!canApprove(a)) return;
+        tbody.insertAdjacentHTML('beforeend', resignRow(a));
+      });
+    });
+  }
   rebindApprovePass();
   rebindApplyView();
   bindResignExport();
+  bindResignActions();
+  filterResignTodo();
 };
 
 /* ---------- 6) 退会申请表 Word（.docx）生成 ---------- */
@@ -322,8 +364,8 @@ function buildResignDocx(a) {
 
   const statement = '本人自愿申请退出应用经济系学生会。退出后不再以系学生会成员身份参与工作，已交回学生会配发物资、在办事项及相关工作资料，无遗留纠纷。';
   const cStatement = run(statement) + '<w:r><w:br/></w:r>' + run('申请人（签字）：') + appSig + run(`　　日期：${dateStr}`);
-  const cDept = run(`意见：${op(['副部长审核', '部长审核'])}`) + '<w:r><w:br/></w:r>' + run('部长（签字）：') + sigImg('部长审核') + run('　　副部长（签字）：') + sigImg('副部长审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
-  const cPres = run(`意见：${op(['副主席审核', '主席审核'])}`) + '<w:r><w:br/></w:r>' + run('主席（签字）：') + sigImg('主席审核') + run('　　副主席（签字）：') + sigImg('副主席审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
+  const cDept = run(`意见：${op(['副部长审核', '部长审核'])}`) + '<w:r><w:br/></w:r>' + run('副部长（签字）：') + sigImg('副部长审核') + run('　　部长（签字）：') + sigImg('部长审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
+  const cPres = run(`意见：${op(['副主席审核', '主席审核'])}`) + '<w:r><w:br/></w:r>' + run('副主席（签字）：') + sigImg('副主席审核') + run('　　主席（签字）：') + sigImg('主席审核') + '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
 
   const rows = [
     `<w:tr>${cell(run('姓    名', { bold: true }))}${cell(run(a.name))}${cell(run('性    别', { bold: true }))}${cell(run(p.gender || '—'))}</w:tr>`,
@@ -403,8 +445,8 @@ function resignPrintBody(a) {
     <tr>${lab('退会原因')}${wide(esc(v.reason || '—'))}</tr>
     <tr>${lab('工作交接情况')}${wide(esc(v.handover || '—'))}</tr>
     <tr>${lab('本人声明')}${wide(`${esc(statement)}<br>申请人（签字）：${appSig}　　日期：${dateStr}`)}</tr>
-    <tr>${lab('部门意见')}${wide(`意见：${op(['副部长审核', '部长审核'])}<br>部长（签字）：${sig('部长审核')}　　副部长（签字）：${sig('副部长审核')}<br>日期：${dateStr}`)}</tr>
-    <tr>${lab('主席团意见')}${wide(`意见：${op(['副主席审核', '主席审核'])}<br>主席（签字）：${sig('主席审核')}　　副主席（签字）：${sig('副主席审核')}<br>日期：${dateStr}`)}</tr>
+    <tr>${lab('部门意见')}${wide(`意见：${op(['副部长审核', '部长审核'])}<br>副部长（签字）：${sig('副部长审核')}　　部长（签字）：${sig('部长审核')}<br>日期：${dateStr}`)}</tr>
+    <tr>${lab('主席团意见')}${wide(`意见：${op(['副主席审核', '主席审核'])}<br>副主席（签字）：${sig('副主席审核')}　　主席（签字）：${sig('主席审核')}<br>日期：${dateStr}`)}</tr>
   </table>`;
 }
 
