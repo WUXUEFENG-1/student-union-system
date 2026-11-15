@@ -19,6 +19,15 @@
 
   function iso() { return new Date().toISOString(); }
 
+  /* 带超时的 fetch：云端不可达时及时放行本机登录，避免一直卡在“正在连接云端” */
+  function fetchJSON(url, opts, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, ms || 8000);
+    opts = opts || {};
+    opts.signal = ctrl.signal;
+    return fetch(url, opts).finally(function () { clearTimeout(timer); });
+  }
+
   function status(text, ok) {
     const el = document.getElementById('cloudStatus');
     if (!el) return;
@@ -27,7 +36,7 @@
   }
 
   function readRemote() {
-    return fetch(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID + '&select=data,updated_at', { headers: HEADERS })
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID + '&select=data,updated_at', { headers: HEADERS })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(function (arr) { return Array.isArray(arr) && arr[0] ? arr[0] : null; });
   }
