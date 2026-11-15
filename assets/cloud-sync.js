@@ -1,6 +1,7 @@
 /* 云端同步：Supabase REST，整份数据存一行，云端为准；本地 localStorage 作为离线兜底。
  * 表 state：id int 主键、data jsonb、updated_at timestamptz。
  * 规则：云端有数据就以云端为准，避免已删除的部门/成员/通知被本机残留数据「复活」。
+ * 健壮性：所有云端请求 8 秒超时；无论云端是否可达，最多 10 秒一定放行登录，避免卡在“正在连接云端”。
  */
 (function () {
   const SB_URL = 'https://btyhldpdniccreccxnru.supabase.co';
@@ -19,7 +20,7 @@
 
   function iso() { return new Date().toISOString(); }
 
-  /* 带超时的 fetch：云端不可达时及时放行本机登录，避免一直卡在“正在连接云端” */
+  /* 带超时的 fetch：云端不可达时及时中断，避免请求一直挂起 */
   function fetchJSON(url, opts, ms) {
     const ctrl = new AbortController();
     const timer = setTimeout(function () { ctrl.abort(); }, ms || 8000);
@@ -42,11 +43,11 @@
   }
 
   function createRemote(payload) {
-    return fetch(SB_URL + '/rest/v1/' + TABLE, { method: 'POST', headers: HEADERS, body: JSON.stringify(payload) });
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE, { method: 'POST', headers: HEADERS, body: JSON.stringify(payload) });
   }
 
   function writeRemote(payload) {
-    return fetch(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(payload) });
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(payload) });
   }
 
   function cleanSnapshot() {
@@ -55,23 +56,30 @@
     return snap;
   }
 
-  /* 初始云端同步就绪前，本机快照一律不上推，避免空种子覆盖云端已有名单 */
   let readyResolve;
   const ready = new Promise(function (res) { readyResolve = res; });
   window.__syncReady = false;
+  let readyFlag = false;
+
+  function markReady() {
+    if (readyFlag) return;
+    readyFlag = true;
+    window.__syncReady = true;
+    readyResolve();
+    const btn = document.getElementById('loginBtn');
+    if (btn) btn.disabled = false;
+  }
 
   function pushLocal() {
-    return ready.then(function () {
-      const payload = { id: ROW_ID, data: cleanSnapshot(), updated_at: iso() };
-      return readRemote().then(function (row) {
-        return row ? writeRemote(payload) : createRemote(payload);
-      }).then(function () {
-        localStorage.removeItem(PENDING);
-        try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
-        localStorage.setItem(STORE_KEY, JSON.stringify(db));
-        status('云端已连接 · 名单实时同步', true);
-        return true;
-      });
+    const payload = { id: ROW_ID, data: cleanSnapshot(), updated_at: iso() };
+    return readRemote().then(function (row) {
+      return row ? writeRemote(payload) : createRemote(payload);
+    }).then(function () {
+      localStorage.removeItem(PENDING);
+      try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
+      localStorage.setItem(STORE_KEY, JSON.stringify(db));
+      status('云端已连接 · 名单实时同步', true);
+      return true;
     }).catch(function () {
       localStorage.setItem(PENDING, '1');
       status('云端离线 · 改动已暂存在本机', false);
@@ -87,17 +95,10 @@
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
   }
 
-  function markReady() {
-    window.__syncReady = true;
-    readyResolve();
-    const btn = document.getElementById('loginBtn');
-    if (btn) btn.disabled = false;
-  }
-
   function pullRemote() {
     const pending = localStorage.getItem(PENDING) === '1';
     const step = pending ? pushLocal() : Promise.resolve(true);
-    return step.then(function (ok) {
+    step.then(function (ok) {
       if (!ok) { markReady(); return; }
       return readRemote().then(function (row) {
         if (!row || !row.data || !Array.isArray(row.data.members)) {
@@ -128,6 +129,9 @@
 
   const loginBtn = document.getElementById('loginBtn');
   if (loginBtn) loginBtn.disabled = true;
+
+  /* 绝对兜底：云端再慢/再不可达，10 秒内一定放行登录，不再一直停在“正在连接云端” */
+  setTimeout(markReady, 10000);
 
   if (typeof fetch === 'function') pullRemote();
   else { status('当前浏览器不支持联网同步', false); markReady(); }
