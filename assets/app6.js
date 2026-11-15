@@ -50,9 +50,17 @@ function nodeIdentity(label, dept) {
   }
 }
 
+/* 是否为当前用户本人提交的申请（本人不可审批本人） */
+function isSelf(a) {
+  if (!cur || !a) return false;
+  if (a.sno && cur.sno) return String(a.sno) === String(cur.sno);
+  return a.name === cur.name && (!a.dept || !cur.dept || a.dept === cur.dept);
+}
+
 /* ---------- 1) 审批权限：按动态节点岗位严格限定，不可跨级代审 ---------- */
 const _canApprove6 = canApprove;
 canApprove = function (a) {
+  if (isSelf(a)) return false;
   if (cur.role === 'admin') return true;
   if (a.type === 'leaveclub') {
     ensureFlow(a);
@@ -79,6 +87,7 @@ const PENDING_STATUS6 = ['待审核', '审核中', '待分派', '处理中'];
 function myReviewApplies() {
   return (db.applies || []).filter((x) => {
     if (!PENDING_STATUS6.includes(x.status)) return false;
+    if (isSelf(x)) return false;
     if (cur.role === 'admin') return true;
     if (cur.role === 'minister' && x.dept !== cur.dept) return false;
     return canApprove(x);
@@ -371,6 +380,7 @@ const STAGE_TITLE6 = ['副部长', '部长', '副主席', '主席'];
 
 /* 当前用户是否可见这条待办：退会走动态节点权限，竞选沿用四级岗位比对 */
 function resignTodoVisible(a) {
+  if (isSelf(a)) return false;
   if (cur.role === 'admin') return true;
   if (a.type === 'leaveclub') return canApprove(a);
   if (a.type === 'election') return STAGE_TITLE6[a.stage] === (cur.title || '');
@@ -381,13 +391,13 @@ function resignTodoVisible(a) {
 function bindResignActions() {
   document.querySelectorAll('[data-apply-pass]').forEach((btn) => {
     const a = (db.applies || []).find((x) => x.id === btn.dataset.applyPass);
-    if (!a || !FOUR_LEVEL_TYPES.includes(a.type)) return;
+    if (!a) return;
     if (!canApprove(a)) { btn.remove(); return; }
     btn.onclick = () => (a.type === 'leaveclub' ? openResignApproveForm(a) : openApproveForm(a));
   });
   document.querySelectorAll('[data-apply-reject]').forEach((btn) => {
     const a = (db.applies || []).find((x) => x.id === btn.dataset.applyReject);
-    if (!a || !FOUR_LEVEL_TYPES.includes(a.type)) return;
+    if (!a) return;
     if (!canApprove(a)) { btn.remove(); return; }
     btn.onclick = () => {
       openForm({
