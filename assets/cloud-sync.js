@@ -46,16 +46,23 @@
     return snap;
   }
 
+  /* 初始云端同步就绪前，本机快照一律不上推，避免空种子覆盖云端已有名单 */
+  let readyResolve;
+  const ready = new Promise(function (res) { readyResolve = res; });
+  window.__syncReady = false;
+
   function pushLocal() {
-    const payload = { id: ROW_ID, data: cleanSnapshot(), updated_at: iso() };
-    return readRemote().then(function (row) {
-      return row ? writeRemote(payload) : createRemote(payload);
-    }).then(function () {
-      localStorage.removeItem(PENDING);
-      try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
-      localStorage.setItem(STORE_KEY, JSON.stringify(db));
-      status('云端已连接 · 名单实时同步', true);
-      return true;
+    return ready.then(function () {
+      const payload = { id: ROW_ID, data: cleanSnapshot(), updated_at: iso() };
+      return readRemote().then(function (row) {
+        return row ? writeRemote(payload) : createRemote(payload);
+      }).then(function () {
+        localStorage.removeItem(PENDING);
+        try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        status('云端已连接 · 名单实时同步', true);
+        return true;
+      });
     }).catch(function () {
       localStorage.setItem(PENDING, '1');
       status('云端离线 · 改动已暂存在本机', false);
@@ -71,16 +78,24 @@
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
   }
 
+  function markReady() {
+    window.__syncReady = true;
+    readyResolve();
+    const btn = document.getElementById('loginBtn');
+    if (btn) btn.disabled = false;
+  }
+
   function pullRemote() {
     const pending = localStorage.getItem(PENDING) === '1';
     const step = pending ? pushLocal() : Promise.resolve(true);
     return step.then(function (ok) {
-      if (!ok) return;
+      if (!ok) { markReady(); return; }
       return readRemote().then(function (row) {
         if (!row || !row.data || !Array.isArray(row.data.members)) {
           /* 云端还没有数据：把本机现有数据推上去建立首份副本 */
           pushLocal();
           status('云端已连接 · 已建立首份数据', true);
+          markReady();
           return;
         }
         const remoteAt = row.updated_at || '';
@@ -89,8 +104,9 @@
           applyRemote(row);
         }
         status('云端已连接 · 名单实时同步', true);
+        markReady();
       });
-    }).catch(function () { status('云端离线 · 仅本机数据可用', false); });
+    }).catch(function () { status('云端离线 · 仅本机数据可用', false); markReady(); });
   }
 
   /* 包装 save()：先写本地，防抖后回写云端 */
@@ -104,6 +120,9 @@
     timer = setTimeout(pushLocal, 500);
   };
 
+  const loginBtn = document.getElementById('loginBtn');
+  if (loginBtn) loginBtn.disabled = true;
+
   if (typeof fetch === 'function') pullRemote();
-  else status('当前浏览器不支持联网同步', false);
+  else { status('当前浏览器不支持联网同步', false); markReady(); }
 })();
