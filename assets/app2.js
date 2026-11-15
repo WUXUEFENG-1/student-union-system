@@ -13,13 +13,15 @@ function renderActivity() {
         <tbody>${db.activities.map((a) => {
     const collab = a.collaborators.length ? a.collaborators.map((c) => `${c.dept} ${c.count}人`).join('、') : '无';
     const ops = [];
-    if (a.status === '待审批' && canApproveActivity()) {
-      ops.push(`<button class="link-btn" data-act-pass="${a.id}">通过</button>`);
+    const pending = ['待主席团审核', '待教师审核'].includes(a.status);
+    if (pending && canApproveActivity()) {
+      const passLabel = a.status === '待主席团审核' ? '主席团审核通过' : '责任教师终审通过';
+      ops.push(`<button class="link-btn" data-act-pass="${a.id}">${passLabel}</button>`);
       ops.push(`<button class="link-btn del" data-act-reject="${a.id}">驳回</button>`);
     }
     if (cur.role === 'minister' && a.dept === cur.dept) {
-      if (a.status === '待审批' || a.status === '已驳回') ops.push(`<button class="link-btn" data-act-edit="${a.id}">修改</button>`);
-      if (a.status === '待审批' || a.status === '已通过') ops.push(`<button class="link-btn del" data-act-revoke="${a.id}">撤销</button>`);
+      if (a.status === '待主席团审核' || a.status === '已驳回') ops.push(`<button class="link-btn" data-act-edit="${a.id}">修改</button>`);
+      if (a.status === '待主席团审核' || a.status === '已通过') ops.push(`<button class="link-btn del" data-act-revoke="${a.id}">撤销</button>`);
     }
     return `<tr>
       <td><strong>${esc(a.title)}</strong><div class="cell-sub">${esc(a.content).slice(0, 42)}</div></td>
@@ -35,8 +37,18 @@ function renderActivity() {
   document.querySelectorAll('[data-act-pass]').forEach((b) => {
     b.onclick = () => {
       const a = db.activities.find((x) => x.id === b.dataset.actPass);
-      a.status = '已通过'; a.approver = ROLE_NAMES[cur.role]; a.reason = '';
-      commit('审批活动', `通过 ${a.title}`); render(); toast('已通过：' + a.title);
+      if (a.status === '待主席团审核') {
+        if (!allPower()) { toast('仅主席团及以上可进行一级审核'); return; }
+        a.status = '待教师审核'; a.stage1 = cur.name; a.approver = '主席团';
+        commit('活动一级审核', `主席团通过 ${a.title}`);
+        toast('主席团审核通过，已转责任教师终审');
+      } else if (a.status === '待教师审核') {
+        if (!['admin', 'teacher'].includes(cur.role)) { toast('本节点需责任教师终审'); return; }
+        a.status = '已通过'; a.stage2 = cur.name; a.approver = ROLE_NAMES[cur.role]; a.reason = '';
+        commit('活动终审', `责任教师通过 ${a.title}`);
+        toast('责任教师终审通过，活动已上架开放报名');
+      }
+      save(); render();
     };
   });
   document.querySelectorAll('[data-act-reject]').forEach((b) => {
@@ -90,7 +102,7 @@ function actForm(id) {
       const collaborators = [];
       if (d.cdept1 !== '无') collaborators.push({ dept: d.cdept1, count: d.cnum1 });
       if (d.cdept2 !== '无') collaborators.push({ dept: d.cdept2, count: d.cnum2 });
-      const payload = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: d.start, end: d.end, place: d.place, content: d.content, status: '待审批', approver: '', reason: '' };
+      const payload = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: d.start, end: d.end, place: d.place, content: d.content, status: '待主席团审核', approver: '', reason: '', stage1: '', stage2: '' };
       if (id) Object.assign(a, payload);
       else db.activities.push(Object.assign({ id: uid('a') }, payload));
       commit(id ? '修改活动申请' : '提交活动申请', d.title); render(); toast(id ? '已提交修改，等待审批' : '活动申请已提交，等待审批');
@@ -143,6 +155,7 @@ function renderPersonnel() {
             <td><div class="row-actions">
               ${allPower() ? `<button class="link-btn" data-promote="${m.id}">职务调整</button>` : ''}
               ${canRemove(m) ? `<button class="link-btn del" data-remove="${m.id}">罢免</button>` : ''}
+              ${allPower() && !((db.accounts.find((a) => a.username === m.account) || {}).role === 'admin') ? `<button class="link-btn del" data-mem-del="${m.id}">删除</button>` : ''}
             </div></td>
           </tr>`).join('') || '<tr><td colspan="14" class="empty">暂无成员</td></tr>'}
         </tbody>
@@ -184,14 +197,14 @@ function renderPersonnel() {
     const body = openForm({
       title: '一键导入成员',
       okText: '开始导入',
-      hint: '每行一名成员，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码」排列，逗号或制表符分隔（可直接从 Excel 复制粘贴）；账号与初始密码留空则只建成员档案。',
-      fields: [{ key: 'rows', label: '成员数据', type: 'textarea', placeholder: '张三,男,汉族,共青团员,2026级经济管理1班,138****0001,宣传部,20260001,zhang01,123456\n李四,女,汉族,群众,2026级会计1班,139****0002,秘书部,20260002,li02,123456' }],
+      hint: '每行一名成员，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码,职务」排列，逗号或制表符分隔（可直接从 Excel 复制粘贴）；职务可填主席/副主席/部长/副部长/成员，留空默认为成员，系统按职务自动定身份；重复人员按学号自动同步更新，无需逐条修改。',
+      fields: [{ key: 'rows', label: '成员数据', type: 'textarea', placeholder: '张三,男,汉族,共青团员,2026级经济管理1班,138****0001,宣传部,20260001,zhang01,123456,部长\n李四,女,汉族,群众,2026级会计1班,139****0002,秘书部,20260002,li02,123456,成员' }],
       extra: '<div class="field"><label>或选择 Excel / CSV 文件（.xlsx .csv .txt）</label><input type="file" id="csvFile" accept=".csv,.txt,.xlsx" class="file-input"></div>',
       onSubmit(d) {
         const result = importMembers(d.rows);
-        commit('导入成员', `新增 ${result.added} 人，跳过 ${result.skipped} 行`);
+        commit('导入成员', `新增 ${result.added} 人，更新 ${result.updated} 人，跳过 ${result.skipped} 行`);
         render();
-        toast(`导入完成：新增 ${result.added} 人，跳过 ${result.skipped} 行`);
+        toast(`导入完成：新增 ${result.added} 人，更新 ${result.updated} 人，跳过 ${result.skipped} 行`);
         if (result.messages.length) setTimeout(() => openInfo('导入结果说明', `<div class="perm-list">${result.messages.map((m) => `<div class="perm-item"><span class="dot"></span>${esc(m)}</div>`).join('')}</div>`), 300);
       }
     });
@@ -218,7 +231,7 @@ function renderPersonnel() {
         { key: 'account', label: '登录账号' },
         { key: 'password', label: '初始密码' }
       ],
-      values: { gender: '男', ethnicity: '汉族', politics: '共青团员', dept: cur.role === 'minister' ? cur.dept : DEPTS[0], title: '成员' },
+      values: { gender: '男', ethnicity: '汉族', politics: '共青团员', dept: cur.role === 'minister' ? cur.dept : '未加入', title: '成员' },
       onSubmit(d) {
         const deptName = d.dept || '未加入';
         db.members.push({ id: uid('m'), name: d.name, sno: d.sno, class: d.class || '—', dept: deptName, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.account || '', status: '在任', joined: today() });
@@ -239,7 +252,7 @@ function renderPersonnel() {
         title: '职务调整 · ' + m.name,
         fields: [
           { key: 'title', label: '新职务', type: 'select', options: TITLES },
-          { key: 'dept', label: '所属部门', type: 'select', options: DEPTS }
+          { key: 'dept', label: '所属部门', placeholder: '如：主席团 / 文体部 / 外联部' }
         ],
         values: { title: m.title, dept: m.dept },
         onSubmit(d) {
@@ -264,6 +277,17 @@ function renderPersonnel() {
       commit('罢免成员', `${m.name} ${m.title}`); render(); toast('成员已罢免');
     };
   });
+  document.querySelectorAll('[data-mem-del]').forEach((b) => {
+    b.onclick = () => {
+      const m = db.members.find((x) => x.id === b.dataset.memDel);
+      const acc = db.accounts.find((a) => a.username === m.account);
+      if (acc && acc.role === 'admin') { toast('管理员账号不可删除'); return; }
+      if (!confirm(`确定删除成员「${m.name}」（${m.dept} · ${m.title}）？\n将同时移除其登录账号；历史考核与申请记录仍可归档查询，此操作不可恢复。`)) return;
+      if (m.account) db.accounts = db.accounts.filter((a) => a.username !== m.account);
+      db.members = db.members.filter((x) => x.id !== m.id);
+      commit('删除成员', `${m.name} · ${m.dept} · ${m.title}`); save(); render(); toast('成员记录已删除');
+    };
+  });
 }
 
 function splitRow(line) {
@@ -285,22 +309,35 @@ function readImportFile(file, targetEl) {
 
 function importMembers(text) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-  let added = 0, skipped = 0;
+  let added = 0, updated = 0, skipped = 0;
   const messages = [];
   lines.forEach((line, idx) => {
-    const [name, gender, ethnicity, politics, cls, phone, dept, sno, account, password] = splitRow(line);
+    const cells = splitRow(line);
+    const [name, gender, ethnicity, politics, cls, phone, dept, sno, account, password, titleLabel] = cells;
     if (!name || !sno) { skipped++; messages.push(`第 ${idx + 1} 行缺少姓名或学号，已跳过`); return; }
-    if (db.members.some((m) => m.sno === sno && m.name === name)) { skipped++; messages.push(`第 ${idx + 1} 行「${name}」已存在，已跳过`); return; }
+    if (name === '姓名' || sno === '学号') { skipped++; return; }
     const deptName = dept || '未加入';
-    db.members.push({ id: uid('m'), name, sno, class: cls || '—', dept: deptName, title: '成员', phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', account: account || '', status: '在任', joined: today() });
-    if (account) {
-      if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未创建登录账号`); }
-      else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
-      else db.accounts.push({ username: account, password, name, role: 'student', dept: deptName, title: '成员', sno, class: cls || '—', phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '' });
+    const titleName = normalizeTitle(titleLabel);
+    const profile = { name, sno, class: cls || '—', dept: deptName, title: titleName, phone: phone || '', gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '' };
+    let mem = db.members.find((m) => m.sno === sno) || db.members.find((m) => m.name === name && m.sno === sno);
+    if (mem) {
+      Object.assign(mem, profile, { status: mem.status || '在任' });
+      if (account) mem.account = account;
+      const acc = db.accounts.find((a) => a.username === mem.account) || (account ? db.accounts.find((a) => a.username === account) : null);
+      if (acc) Object.assign(acc, { name, dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics, role: acc.role === 'admin' ? 'admin' : roleFromTitle(titleName) });
+      updated++;
+      messages.push(`第 ${idx + 1} 行「${name}」已按表同步更新`);
+    } else {
+      db.members.push(Object.assign({ id: uid('m'), account: account || '', status: '在任', joined: today() }, profile));
+      if (account) {
+        if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未重复创建`); }
+        else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
+        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+      }
+      added++;
     }
-    added++;
   });
-  return { added, skipped, messages };
+  return { added, updated, skipped, messages };
 }
 
 /* ---------------- 部门 ---------------- */
@@ -339,7 +376,7 @@ function renderDept() {
         <div><h2>部门信息表</h2><div class="sub">${cur.role === 'student' ? '普通学生可查询部门信息并申请加入' : myDeptOnly ? '仅同步本部门成员信息（含部长、副部长）' : '成员数由人员信息表实时同步，含部长、副部长'}</div></div>
         <div class="toolbar">
           ${canEdit && cur.role !== 'minister' ? `<button class="primary-btn" id="addDept">+ 新增部门</button>` : ''}
-          ${cur.role === 'student' ? '<button class="primary-btn light" id="toJoin">提交加入申请</button>' : ''}
+          ${cur.role === 'student' ? '<button class="primary-btn light" id="toJoin">提交我的申请</button>' : ''}
         </div>
       </div>
       <div class="table-wrap"><table>
@@ -498,14 +535,14 @@ function renderAssess() {
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>被考核人</th><th>部门</th><th>周期</th><th>评分</th><th>评语</th><th>状态</th><th>提交人</th><th>操作</th></tr></thead>
+        <thead><tr><th>被考核人</th><th>部门</th><th>周期</th><th>评分</th><th>等级</th><th>评语</th><th>状态</th><th>提交人</th><th>操作</th></tr></thead>
         <tbody>${rows.length ? rows.slice().reverse().map((k) => `
           <tr><td><strong>${esc(k.target)}</strong></td><td>${esc(k.dept)}</td><td>${esc(k.period)}</td>
-            <td><span class="score">${k.score}</span></td><td>${esc(k.comment)}</td><td>${badge(k.status)}</td><td>${esc(k.submitter)}</td>
+            <td><span class="score">${k.score}</span></td><td>${gradeBadge(k.score)}</td><td>${esc(k.comment)}</td><td>${badge(k.status)}</td><td>${esc(k.submitter)}</td>
             <td><div class="row-actions">
               ${cur.role === 'presidium' && k.targetRole === 'member' && k.status === '待审核' ? `<button class="link-btn" data-assess-pass="${k.id}">审核通过</button>` : ''}
               ${k.status === '待审核' && k.submitter === cur.name ? `<button class="link-btn del" data-assess-del="${k.id}">撤回</button>` : ''}
-            </div></td></tr>`).join('') : '<tr><td colspan="8" class="empty">暂无考核记录</td></tr>'}</tbody>
+            </div></td></tr>`).join('') : '<tr><td colspan="9" class="empty">暂无考核记录</td></tr>'}</tbody>
       </table></div>
     </div>`;
 
@@ -514,16 +551,21 @@ function renderAssess() {
     const m = db.members.find((x) => x.name === target);
     openForm({
       title: '考核 · ' + target,
-      hint: cur.role === 'minister' ? '评分将提交主席团复核后生效。' : '考核结果由您直接确认。',
+      hint: '百分制固定四维：出勤 30 分、工作任务 40 分、思想纪律 15 分、群众评价 15 分；总分自动汇总并评定等级。' + (cur.role === 'minister' ? '评分将提交主席团复核后生效。' : '考核结果由您直接确认。'),
       fields: [
         { key: 'period', label: '考核周期', required: true },
-        { key: 'score', label: '评分（0-100）', type: 'number', required: true },
+        { key: 'attend', label: '出勤得分（满分 30）', type: 'number', required: true },
+        { key: 'task', label: '工作任务得分（满分 40）', type: 'number', required: true },
+        { key: 'disc', label: '思想纪律得分（满分 15）', type: 'number', required: true },
+        { key: 'peer', label: '群众评价得分（满分 15）', type: 'number', required: true },
         { key: 'comment', label: '考核评语', type: 'textarea', required: true }
       ],
-      values: { period: '2026 年度', score: 85, comment: '' },
+      values: { period: '2026 年度', attend: 26, task: 34, disc: 12, peer: 13, comment: '' },
       onSubmit(d) {
-        db.assessments.push({ id: uid('k'), targetRole, target, dept: m ? m.dept : cur.dept, period: d.period, score: d.score, comment: d.comment, status: cur.role === 'minister' ? '待审核' : '已通过', submitter: cur.name, date: today() });
-        commit('提交考核', `${target} ${d.score} 分`); render(); toast(cur.role === 'minister' ? '考核已提交复核' : '考核已完成');
+        const dims = { attend: d.attend, task: d.task, disc: d.disc, peer: d.peer };
+        const score = Math.max(0, Math.min(100, Number(d.attend) + Number(d.task) + Number(d.disc) + Number(d.peer)));
+        db.assessments.push({ id: uid('k'), targetRole, target, dept: m ? m.dept : cur.dept, period: d.period, score, dims, comment: d.comment, status: cur.role === 'minister' ? '待审核' : '已通过', submitter: cur.name, date: today() });
+        commit('提交考核', `${target} ${score} 分（${gradeOf(score)}）`); render(); toast(cur.role === 'minister' ? '考核已提交复核' : '考核已完成');
       }
     });
   };
@@ -556,8 +598,9 @@ function renderNotice() {
         <div class="notice-item">
           <h4><span class="badge blue">${esc(n.type)}</span>${esc(n.title)}</h4>
           <p>${esc(n.content)}</p>
+          ${n.attach ? `<div class="cell-sub" style="margin:4px 0">附件：<button class="link-btn" data-notice-file="${n.id}">${esc(n.attach)}</button></div>` : ''}
           <div class="notice-meta" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-            <span>${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）</span>
+            <span>${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）${n.scope && n.scope !== '全员' ? ` · 范围：${esc(n.scope)}` : ''}</span>
             <span class="row-actions">${isPublisher() && n.status === '已发布' ? `<button class="link-btn del" data-notice-withdraw="${n.id}">撤回通知</button>` : ''}</span>
           </div>
         </div>`).join('') || '<div class="empty">暂无通知</div>'}
@@ -565,19 +608,31 @@ function renderNotice() {
     </div>`;
 
   if ($('#addNotice')) $('#addNotice').onclick = () => {
-    openForm({
+    let attachName = '';
+    const body = openForm({
       title: '发布通知',
       fields: [
         { key: 'type', label: '通知类型', type: 'select', options: ['活动通知', '其他通知'] },
+        { key: 'scope', label: '生效范围', type: 'select', options: ['全员', '指定部门', '部长团', '主席团'] },
         { key: 'title', label: '通知标题', required: true },
         { key: 'content', label: '通知内容', type: 'textarea', required: true }
       ],
+      extra: '<div class="field"><label>附件（可选，支持文档 / 表格 / 图片）</label><input type="file" id="nAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>',
       onSubmit(d) {
-        db.notices.push({ id: uid('n'), type: d.type, title: d.title, content: d.content, date: today(), publisher: ROLE_NAMES[cur.role], publisherName: cur.name, status: '已发布' });
+        db.notices.push({ id: uid('n'), type: d.type, scope: d.scope, title: d.title, content: d.content, attach: attachName, date: today(), publisher: ROLE_NAMES[cur.role], publisherName: cur.name, status: '已发布' });
         commit('发布通知', d.title); render(); toast('通知已发布');
       }
     });
+    body.querySelector('#nAttach').onchange = (e) => { attachName = e.target.files[0] ? e.target.files[0].name : ''; };
   };
+  document.querySelectorAll('[data-notice-file]').forEach((b) => {
+    b.onclick = () => {
+      const n = db.notices.find((x) => x.id === b.dataset.noticeFile);
+      const text = `通知标题：${n.title}\n发布人：${n.publisherName}（${n.publisher}）\n发布时间：${n.date}\n生效范围：${n.scope || '全员'}\n附件：${n.attach}\n\n${n.content}`;
+      downloadBlob(new Blob(['\ufeff' + text], { type: 'text/plain;charset=utf-8' }), (n.attach || n.title).replace(/\.[^.]+$/, '') + '.txt');
+      commit('下载通知附件', n.title);
+    };
+  });
   document.querySelectorAll('[data-notice-withdraw]').forEach((b) => {
     b.onclick = () => {
       const n = db.notices.find((x) => x.id === b.dataset.noticeWithdraw);
@@ -615,11 +670,12 @@ function renderLeave() {
         <tbody>${visible.length ? visible.slice().reverse().map((l) => `
           <tr><td><strong>${esc(l.applicant)}</strong></td><td>${esc(ROLE_NAMES[l.applicantRole] || l.applicantRole)}</td><td>${esc(l.dept)}</td>
             <td>${esc(l.type)}</td><td class="nowrap">${esc(l.start)}<br>${esc(l.end)}</td>
-            <td>${esc(l.reason)}${l.reviewNote ? `<div class="cell-sub">审核意见：${esc(l.reviewNote)}</div>` : ''}</td>
+            <td>${esc(l.reason)}${l.attach ? `<div class="cell-sub">附件：${esc(l.attach)}</div>` : ''}${l.reviewNote ? `<div class="cell-sub">审核意见：${esc(l.reviewNote)}</div>` : ''}</td>
             <td>${esc(l.reviewer)}</td><td>${badge(l.status)}</td>
             <td><div class="row-actions">
               ${canReviewLeave(l) ? `<button class="link-btn" data-leave-pass="${l.id}">通过</button><button class="link-btn del" data-leave-reject="${l.id}">驳回</button>` : ''}
-              ${l.applicant === cur.name && l.status === '待审核' ? `<button class="link-btn del" data-leave-revoke="${l.id}">撤销申请</button>` : ''}
+              ${l.applicant === cur.name && l.status === '待审核' ? `<button class="link-btn del" data-leave-revoke="${l.id}">撤回</button>` : ''}
+              ${(l.applicant === cur.name || allPower()) ? `<button class="link-btn del" data-leave-del="${l.id}">删除</button>` : ''}
             </div></td></tr>`).join('') : '<tr><td colspan="9" class="empty">暂无请假记录</td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -632,11 +688,12 @@ function renderLeave() {
         { key: 'type', label: '请假类型', type: 'select', options: ['事假', '病假', '公假'] },
         { key: 'start', label: '开始日期', type: 'date', required: true },
         { key: 'end', label: '结束日期', type: 'date', required: true },
-        { key: 'reason', label: '请假原因', type: 'textarea', required: true, placeholder: '请填写具体事由与相关证明' }
+        { key: 'reason', label: '请假原因', type: 'textarea', required: true, placeholder: '请填写具体事由与相关证明' },
+        { key: 'attach', label: '附件（可选，如病假证明文件名）' }
       ],
       values: { start: today(), end: today() },
       onSubmit(d) {
-        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today() });
+        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, attach: d.attach || '', status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today() });
         commit('提交请假', `${d.type} ${d.start}—${d.end}`); render(); toast('请假申请已提交');
       }
     });
@@ -666,65 +723,273 @@ function renderLeave() {
   document.querySelectorAll('[data-leave-revoke]').forEach((b) => {
     b.onclick = () => {
       const l = db.leaves.find((x) => x.id === b.dataset.leaveRevoke);
-      if (!confirm('确定撤销这条请假申请？')) return;
-      l.status = '已撤销';
-      commit('撤销请假', l.applicant); save(); render(); toast('请假申请已撤销');
+      if (!confirm('确定撤回这条请假申请？撤回后不计入出勤。')) return;
+      l.status = '已撤回';
+      commit('撤回请假', l.applicant); save(); render(); toast('请假申请已撤回，不计入出勤');
+    };
+  });
+  document.querySelectorAll('[data-leave-del]').forEach((b) => {
+    b.onclick = () => {
+      const l = db.leaves.find((x) => x.id === b.dataset.leaveDel);
+      if (!confirm(`确定删除「${l.applicant}」的${l.type}记录？删除后不再参与出勤与考核统计，操作日志予以保留。`)) return;
+      commit('删除请假记录', `${l.applicant} ${l.type} ${l.start}—${l.end}`);
+      db.leaves = db.leaves.filter((x) => x.id !== l.id);
+      save(); render(); toast('请假记录已删除');
     };
   });
 }
 
-/* ---------------- 加入申请 ---------------- */
+/* ---------------- 我的申请中心 ---------------- */
+const APPLY_TYPES = {
+  adjust: {
+    name: '部门调整申请',
+    hint: '在岗成员常规调整所属部门或岗位。流程：原部门负责人 → 目标部门负责人 → 主席团。',
+    stages: ['原部门负责人', '目标部门负责人', '主席团'],
+    fields: [
+      { key: 'toDept', label: '意向调入部门', type: 'select', options: DEPTS },
+      { key: 'toTitle', label: '意向岗位', type: 'select', options: TITLES },
+      { key: 'reason', label: '调整理由', type: 'textarea', required: true },
+      { key: 'handover', label: '原部门待办工作安排', type: 'textarea' },
+      { key: 'agree', label: '是否征得原部门初步同意', type: 'select', options: ['是', '否'] },
+      { key: 'attach', label: '附件（可选）' }
+    ]
+  },
+  transfer: {
+    name: '部门调动申请',
+    hint: '面向跨部门人员流动办理。流程：原部门负责人 → 目标部门负责人 → 主席团；通过后考核归属随部门切换，历史考核保留。',
+    stages: ['原部门负责人', '目标部门负责人', '主席团'],
+    fields: [
+      { key: 'toDept', label: '意向调入部门', type: 'select', options: DEPTS },
+      { key: 'toTitle', label: '意向岗位', type: 'select', options: TITLES },
+      { key: 'reason', label: '调动理由', type: 'textarea', required: true },
+      { key: 'handover', label: '原部门待办工作安排', type: 'textarea' },
+      { key: 'agree', label: '是否征得原部门初步同意', type: 'select', options: ['是', '否'] },
+      { key: 'attach', label: '附件（可选）' }
+    ]
+  },
+  leaveclub: {
+    name: '退会申请',
+    hint: '流程：部长 → 主席团。全部通过后终止考核、移出排班与例会推送，档案转为只读。',
+    stages: ['部长', '主席团'],
+    fields: [
+      { key: 'leaveType', label: '退会类型', type: 'select', options: ['自愿申请', '其他'] },
+      { key: 'reason', label: '退会理由', type: 'textarea', required: true },
+      { key: 'handoverDone', label: '是否完成工作交接', type: 'select', options: ['是', '否'] },
+      { key: 'handoverNote', label: '交接说明', type: 'textarea' },
+      { key: 'attach', label: '附件（可选，交接清单）' },
+      { key: 'promise', label: '承诺勾选（填写"已知晓并承诺"）', required: true }
+    ]
+  },
+  feedback: {
+    name: '意见反馈与诉求',
+    hint: '由主席团分派至对应部门负责人处理并回复；全部记录永久留痕。',
+    stages: ['主席团分派', '部门负责人回复'],
+    fields: [
+      { key: 'anonymous', label: '提交方式', type: 'select', options: ['实名', '匿名'] },
+      { key: 'category', label: '诉求分类', type: 'select', options: ['提案', '投诉', '建议', '求助'] },
+      { key: 'title', label: '诉求标题', required: true },
+      { key: 'detail', label: '详细内容', type: 'textarea', required: true },
+      { key: 'targetDept', label: '指定对接部门', type: 'select', options: DEPTS },
+      { key: 'contact', label: '联系方式（匿名模式下隐藏）' },
+      { key: 'attach', label: '佐证附件' }
+    ]
+  },
+  report: {
+    name: '述职申请',
+    visible: (r) => ['minister', 'presidium'].includes(r),
+    hint: '仅部长团与主席团成员可提交；主席团查阅归档，述职材料与本学期考核记录绑定存档。',
+    stages: ['主席团查阅归档'],
+    fields: [
+      { key: 'period', label: '述职学期', required: true },
+      { key: 'summary', label: '述职摘要', type: 'textarea', required: true },
+      { key: 'reportFile', label: '述职报告文件名（Word / PDF）' },
+      { key: 'selfEval', label: '工作自评', type: 'textarea' },
+      { key: 'plan', label: '后续工作规划', type: 'textarea' }
+    ]
+  },
+  election: {
+    name: '换届竞选报名',
+    hint: '流程：主席团资格预审 → 责任老师终审；未在开放时段内不可报名。',
+    stages: ['主席团资格预审', '责任老师终审'],
+    fields: [
+      { key: 'title', label: '竞选岗位', required: true },
+      { key: 'manifesto', label: '竞选宣言', type: 'textarea', required: true },
+      { key: 'workBrief', label: '学生会工作简述', type: 'textarea' },
+      { key: 'awards', label: '评优获奖佐证材料' },
+      { key: 'obey', label: '是否服从岗位调剂', type: 'select', options: ['是', '否'] }
+    ]
+  },
+  cert: {
+    name: '任职证明申请',
+    hint: '主席团审核；通过后按统一模板导出带签字栏证明，生成唯一编号并留存导出日志。',
+    stages: ['主席团审核'],
+    fields: [
+      { key: 'range', label: '任职起止时间', placeholder: '2025-09-01 至 2026-07-01' },
+      { key: 'usage', label: '用途', required: true },
+      { key: 'copies', label: '申请份数', type: 'number' },
+      { key: 'note', label: '备注' }
+    ]
+  },
+  volunteer: {
+    name: '志愿服务认定申请',
+    hint: '流程：部长初审 → 主席团复核；通过后时长计入个人档案并累计，同时计入考核加分项。',
+    stages: ['部长初审', '主席团复核'],
+    fields: [
+      { key: 'activity', label: '志愿活动名称', required: true },
+      { key: 'organizer', label: '主办单位', required: true },
+      { key: 'period', label: '起止时间', required: true },
+      { key: 'hours', label: '总服务时长（小时）', type: 'number', required: true },
+      { key: 'brief', label: '活动简介', type: 'textarea' },
+      { key: 'proof', label: '证明材料（证书 / 签到表 / 截图文件名）' }
+    ]
+  }
+};
+
+function applyTypesVisible() {
+  return Object.entries(APPLY_TYPES).filter(([, t]) => !t.visible || t.visible(cur.role));
+}
+function applyTrackHtml(a) {
+  return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
+}
+function applyApproved(a) {
+  const mem = db.members.find((m) => m.name === a.name) || db.members.find((m) => m.sno === a.sno);
+  const acc = db.accounts.find((x) => x.name === a.name);
+  if ((a.type === 'adjust' || a.type === 'transfer') && mem) {
+    mem.dept = a.values.toDept; mem.title = a.values.toTitle;
+    if (acc) { acc.dept = mem.dept; acc.title = mem.title; if (acc.role !== 'admin' && acc.role !== 'teacher') acc.role = roleFromTitle(mem.title); }
+  }
+  if (a.type === 'leaveclub' && mem) { mem.status = '已退会'; if (acc && acc.role !== 'admin' && acc.role !== 'teacher') acc.role = 'student'; }
+  if (a.type === 'volunteer' && mem) { mem.volunteerHours = (Number(mem.volunteerHours) || 0) + Number(a.values.hours || 0); }
+  if (a.type === 'cert') { a.certNo = 'RZ' + String(Date.now()).slice(-8); }
+}
+function applyRow(a, review) {
+  const canReview = allPower() || (cur.role === 'minister' && a.dept === cur.dept);
+  const pending = ['待审核', '审核中', '待分派', '处理中'].includes(a.status);
+  const ops = [];
+  ops.push(`<button class="link-btn" data-apply-view="${a.id}">查看</button>`);
+  if (!review && ['待审核', '审核中', '待分派', '处理中'].includes(a.status)) {
+    ops.push(`<button class="link-btn del" data-apply-cancel="${a.id}">撤回</button>`);
+  }
+  if (review && canReview && pending) {
+    ops.push(`<button class="link-btn" data-apply-pass="${a.id}">通过</button>`);
+    ops.push(`<button class="link-btn del" data-apply-reject="${a.id}">驳回</button>`);
+  }
+  const who = review ? `<td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>` : '<td></td>';
+  return `<tr>${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
+}
+
 function renderJoin() {
-  if (cur.role === 'student') {
-    const mine = db.joinRequests.filter((j) => j.name === cur.name);
-    $('#views').innerHTML = `
-      <div class="card">
-        <div class="card-head">
-          <div><h2>我的入会申请</h2><div class="sub">提交后由所申请部门的部长/副部长审核</div></div>
-          <button class="primary-btn" id="addJoin">+ 提交加入申请</button>
-        </div>
-        <div class="table-wrap"><table>
-          <thead><tr><th>申请部门</th><th>班级</th><th>申请理由</th><th>提交日期</th><th>状态</th><th>操作</th></tr></thead>
-          <tbody>${mine.length ? mine.map((j) => `<tr><td><span class="badge blue">${esc(j.dept)}</span></td><td>${esc(j.class || '—')}</td><td>${esc(j.reason)}</td><td>${esc(j.date)}</td><td>${badge(j.status)}</td>
-            <td>${j.status === '待审核' ? `<button class="link-btn del" data-join-del="${j.id}">撤回</button>` : '<span class="cell-sub">—</span>'}</td></tr>`).join('')
-            : '<tr><td colspan="6" class="empty">还没有提交申请</td></tr>'}</tbody>
-        </table></div>
-      </div>`;
-    $('#addJoin').onclick = () => {
+  db.applies = db.applies || [];
+  const mine = db.applies.filter((a) => a.name === cur.name);
+  const pending = db.applies.filter((a) => ['待审核', '审核中', '待分派', '处理中'].includes(a.status));
+  const canReview = allPower() || cur.role === 'minister';
+  const reviewList = cur.role === 'minister' ? pending.filter((a) => a.dept === cur.dept) : pending;
+  const legacy = cur.role === 'minister' ? db.joinRequests.filter((j) => j.dept === cur.dept) : db.joinRequests;
+
+  $('#views').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <div><h2>我的申请</h2><div class="sub">默认部门调整申请；可提交调动、退会、意见反馈、述职、换届竞选、任职证明、志愿认定等事项，审批轨迹全程留痕</div></div>
+        <button class="primary-btn" id="addApply">+ 提交申请</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>${canReview ? '<th>申请人</th>' : ''}<th>申请类型</th><th>部门</th><th>提交时间</th><th>状态</th><th>审批轨迹</th><th>操作</th></tr></thead>
+        <tbody>${mine.length ? mine.slice().reverse().map((a) => applyRow(a, false)).join('') : '<tr><td colspan="7" class="empty">还没有提交申请</td></tr>'}</tbody>
+      </table></div>
+    </div>
+    ${canReview ? `
+    <div class="card">
+      <div class="card-head"><div><h2>待我审批</h2><div class="sub">共 ${reviewList.length} 条待处理申请</div></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>申请人</th><th>类型</th><th>部门</th><th>提交时间</th><th>状态</th><th>轨迹</th><th>操作</th></tr></thead>
+        <tbody>${reviewList.length ? reviewList.slice().reverse().map((a) => applyRow(a, true)).join('') : '<tr><td colspan="7" class="empty">暂无待审批申请</td></tr>'}</tbody>
+      </table></div>
+    </div>` : ''}
+    <div class="card">
+      <div class="card-head"><div><h2>历史入会申请</h2><div class="sub">旧版加入部门申请记录留档</div></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>姓名</th><th>学号</th><th>申请部门</th><th>申请理由</th><th>日期</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>${legacy.length ? legacy.slice().reverse().map((j) => `
+          <tr><td><strong>${esc(j.name)}</strong></td><td>${esc(j.sno)}</td>
+            <td><span class="badge blue">${esc(j.dept)}</span></td><td>${esc(j.reason)}</td><td>${esc(j.date)}</td><td>${badge(j.status)}</td>
+            <td><div class="row-actions">${(cur.role === 'minister' || allPower()) && j.status === '待审核'
+              ? `<button class="link-btn" data-join-pass="${j.id}">通过</button><button class="link-btn del" data-join-reject="${j.id}">驳回</button>` : '<span class="cell-sub">—</span>'}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">暂无入会申请记录</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+
+  $('#addApply').onclick = () => {
+    const types = applyTypesVisible();
+    openForm({
+      title: '选择申请类型',
+      fields: [{ key: 'type', label: '申请类型', type: 'select', options: types.map(([, t]) => t.name) }],
+      onSubmit(d) {
+        const found = types.find(([, t]) => t.name === d.type);
+        setTimeout(() => applyForm(found[0]), 60);
+      }
+    });
+  };
+
+  function applyForm(key) {
+    const cfg = APPLY_TYPES[key];
+    openForm({
+      title: cfg.name,
+      hint: cfg.hint,
+      fields: cfg.fields,
+      values: { toDept: cur.dept, toTitle: cur.title, targetDept: cur.dept, anonymous: '实名', category: '建议', obey: '是', agree: '否', handoverDone: '是', leaveType: '自愿申请' },
+      onSubmit(d) {
+        db.applies.push({
+          id: uid('ap'), type: key, typeName: cfg.name, name: cur.name, sno: cur.sno || '—', dept: cur.dept, title: cur.title,
+          values: d, date: today(), status: key === 'feedback' ? '待分派' : '待审核', stage: 0,
+          track: [{ actor: cur.name, role: ROLE_NAMES[cur.role], action: '提交申请', note: '', time: today() }]
+        });
+        commit('提交申请', `${cfg.name} · ${cur.name}`); render(); toast('申请已提交');
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-apply-view]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyView);
+      const rows = Object.entries(a.values || {}).map(([k, v]) => `<div><span>${esc(k)}</span><strong>${esc(v || '—')}</strong></div>`).join('');
+      const track = (a.track || []).map((t) => `<div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div>`).join('');
+      openInfo(a.typeName + ' · ' + a.name, `<div class="info-list">${rows}</div>${a.certNo ? `<p class="form-hint">证明编号：${esc(a.certNo)}</p>` : ''}<div class="form-hint" style="margin-top:10px">审批轨迹</div><div class="perm-list">${track || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>'}</div>`, '提交时间：' + a.date);
+    };
+  });
+  document.querySelectorAll('[data-apply-cancel]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyCancel);
+      if (!confirm('确定撤回这条申请？一级审批人处理后不可再撤回。')) return;
+      a.status = '已撤回';
+      a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '申请人撤回', note: '', time: today() });
+      commit('撤回申请', `${a.typeName} · ${a.name}`); save(); render(); toast('申请已撤回');
+    };
+  });
+  document.querySelectorAll('[data-apply-pass]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyPass);
+      const cfg = APPLY_TYPES[a.type];
+      const last = a.stage >= cfg.stages.length - 1;
+      const stageLabel = cfg.stages[a.stage] || '';
+      a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: '', time: today() });
+      if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); }
+      else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; }
+      commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`); save(); render(); toast(last ? '申请已通过' : '已流转至下一审批节点');
+    };
+  });
+  document.querySelectorAll('[data-apply-reject]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyReject);
       openForm({
-        title: '提交加入部门申请',
-        fields: [
-          { key: 'dept', label: '申请部门', type: 'select', options: db.departments.filter((d) => d.status === '正常').map((d) => d.name) },
-          { key: 'reason', label: '申请理由', type: 'textarea', required: true, placeholder: '可填写特长、意向与可投入时间' }
-        ],
+        title: '驳回申请 · ' + a.name,
+        fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
         onSubmit(d) {
-          db.joinRequests.push({ id: uid('j'), name: cur.name, sno: cur.sno || '—', class: cur.class || '—', dept: d.dept, reason: d.reason, date: today(), status: '待审核' });
-          commit('提交入会申请', d.dept); render(); toast('申请已提交');
+          a.status = '已驳回';
+          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
+          commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`); save(); render(); toast('已驳回申请');
         }
       });
     };
-    document.querySelectorAll('[data-join-del]').forEach((b) => {
-      b.onclick = () => {
-        db.joinRequests = db.joinRequests.filter((x) => x.id !== b.dataset.joinDel);
-        commit('撤回入会申请', b.dataset.joinDel); save(); render(); toast('申请已撤回');
-      };
-    });
-    return;
-  }
-
-  const list = cur.role === 'minister' ? db.joinRequests.filter((j) => j.dept === cur.dept) : db.joinRequests;
-  $('#views').innerHTML = `
-    <div class="card">
-      <div class="card-head"><div><h2>部门申请表</h2><div class="sub">${cur.role === 'minister' ? '部长/副部长审核普通学生加入本部门的申请' : '普通学生入会申请总览'}</div></div></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>姓名</th><th>学号</th><th>班级</th><th>申请部门</th><th>申请理由</th><th>日期</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody>${list.length ? list.slice().reverse().map((j) => `
-          <tr><td><strong>${esc(j.name)}</strong></td><td>${esc(j.sno)}</td><td>${esc(j.class || '—')}</td>
-            <td><span class="badge blue">${esc(j.dept)}</span></td><td>${esc(j.reason)}</td><td>${esc(j.date)}</td><td>${badge(j.status)}</td>
-            <td><div class="row-actions">${(cur.role === 'minister' || allPower()) && j.status === '待审核'
-              ? `<button class="link-btn" data-join-pass="${j.id}">通过</button><button class="link-btn del" data-join-reject="${j.id}">驳回</button>` : '<span class="cell-sub">—</span>'}</div></td></tr>`).join('') : '<tr><td colspan="8" class="empty">暂无申请</td></tr>'}</tbody>
-      </table></div>
-    </div>`;
+  });
 
   document.querySelectorAll('[data-join-pass]').forEach((b) => {
     b.onclick = () => {
@@ -745,12 +1010,12 @@ function renderJoin() {
 
 /* ---------------- 账号管理（管理员） ---------------- */
 const ROLE_KEY_FROM_LABEL = {
-  '管理员': 'admin', '主席团': 'presidium', '部长团': 'minister', '普通学生': 'student',
-  admin: 'admin', presidium: 'presidium', minister: 'minister', student: 'student'
+  '管理员': 'admin', '责任教师': 'teacher', '主席团': 'presidium', '部长团': 'minister', '普通学生': 'student',
+  admin: 'admin', teacher: 'teacher', presidium: 'presidium', minister: 'minister', student: 'student'
 };
 
 function renderAccounts() {
-  if (cur.role !== 'admin') { switchView('dashboard'); return; }
+  if (!['admin', 'teacher'].includes(cur.role)) { switchView('dashboard'); return; }
   const list = db.accounts.slice();
   $('#views').innerHTML = `
     <div class="card">
@@ -795,14 +1060,14 @@ function renderAccounts() {
     const body = openForm({
       title: '批量导入账号',
       okText: '开始导入',
-      hint: '每行一名账号，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码,职务,角色」排列，逗号或制表符分隔（可从 Excel 复制粘贴）；角色可选：管理员/主席团/部长团/普通学生，留默认为普通学生；初始密码至少 6 位。导入后同时建立对应成员档案。',
+      hint: '每行一名账号，按「姓名,性别,族别,政治面貌,所在班级,联系电话,部门,学号,账号,初始密码,职务,角色」排列，逗号或制表符分隔（可从 Excel 复制粘贴）；职务可填主席/副主席/部长/副部长/成员，角色留空时按职务自动判定；重复账号按表自动同步更新，无需逐条修改。',
       fields: [{ key: 'rows', label: '账号数据', type: 'textarea', placeholder: '赵小林,男,汉族,共青团员,2026级经济管理1班,138****0031,秘书部,20260031,20260031,123456,成员,普通学生\n钱小燕,女,汉族,群众,2026级会计2班,139****0032,宣传部,20260032,20260032,123456,部长,部长团' }],
       extra: '<div class="field"><label>或选择 Excel / CSV 文件（.xlsx .csv .txt）</label><input type="file" id="accCsv" accept=".csv,.txt,.xlsx" class="file-input"></div>',
       onSubmit(d) {
         const r = importAccounts(d.rows);
-        commit('导入账号', `新增 ${r.added} 个，跳过 ${r.skipped} 行`);
+        commit('导入账号', `新增 ${r.added} 个，更新 ${r.updated} 个，跳过 ${r.skipped} 行`);
         render();
-        toast(`导入完成：新增 ${r.added} 个，跳过 ${r.skipped} 行`);
+        toast(`导入完成：新增 ${r.added} 个，更新 ${r.updated} 个，跳过 ${r.skipped} 行`);
         if (r.messages.length) setTimeout(() => openInfo('导入结果说明', `<div class="perm-list">${r.messages.map((m) => `<div class="perm-item"><span class="dot"></span>${esc(m)}</div>`).join('')}</div>`), 300);
       }
     });
@@ -826,7 +1091,7 @@ function renderAccounts() {
         { key: 'sno', label: '学号' },
         { key: 'class', label: '所在班级' },
         { key: 'phone', label: '联系电话' },
-        { key: 'role', label: '角色', type: 'select', options: ['普通学生', '部长团', '主席团', '管理员'] },
+        { key: 'role', label: '角色', type: 'select', options: ['普通学生', '部长团', '主席团', '责任教师', '管理员'] },
         { key: 'dept', label: '部门', placeholder: '未加入 或部门名称' },
         { key: 'title', label: '职务', type: 'select', options: TITLES }
       ],
@@ -877,22 +1142,32 @@ function renderAccounts() {
 
 function importAccounts(text) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-  let added = 0, skipped = 0;
+  let added = 0, updated = 0, skipped = 0;
   const messages = [];
   lines.forEach((line, idx) => {
     const [name, gender, ethnicity, politics, cls, phone, dept, sno, username, password, titleLabel, roleLabel] = splitRow(line);
     if (!username || !password || !name) { skipped++; messages.push(`第 ${idx + 1} 行缺少账号、初始密码或姓名，已跳过`); return; }
+    if (name === '姓名' || username === '账号') { skipped++; return; }
     if (password.length < 6) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」初始密码不足 6 位，已跳过`); return; }
-    if (db.accounts.some((a) => a.username === username)) { skipped++; messages.push(`第 ${idx + 1} 行「${username}」账号已存在，已跳过`); return; }
     const deptName = dept || '未加入';
-    const titleName = TITLES.includes(titleLabel) ? titleLabel : '成员';
-    const role = ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || roleFromTitle(titleName);
+    const titleName = normalizeTitle(titleLabel);
     const profile = { name, gender: gender || '', ethnicity: ethnicity || '汉族', politics: politics || '', class: cls || '—', phone: phone || '', dept: deptName, sno: sno || '—' };
-    db.accounts.push({ username, password, name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
-    let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
-    if (mem) Object.assign(mem, profile, { title: titleName, account: username, status: mem.status || '在任' });
-    else db.members.push(Object.assign({ id: uid('m'), account: username, title: titleName, status: '在任', joined: today() }, profile));
-    added++;
+    let acc = db.accounts.find((a) => a.username === username);
+    const role = acc && ['admin', 'teacher'].includes(acc.role) ? acc.role : (ROLE_KEY_FROM_LABEL[(roleLabel || '').trim()] || roleFromTitle(titleName));
+    if (acc) {
+      Object.assign(acc, { name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+      let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
+      if (mem) Object.assign(mem, profile, { title: titleName, account: username, status: mem.status || '在任' });
+      else db.members.push(Object.assign({ id: uid('m'), account: username, title: titleName, status: '在任', joined: today() }, profile));
+      updated++;
+      messages.push(`第 ${idx + 1} 行「${username}」已按表同步更新`);
+    } else {
+      db.accounts.push({ username, password, name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+      let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
+      if (mem) Object.assign(mem, profile, { title: titleName, account: username, status: mem.status || '在任' });
+      else db.members.push(Object.assign({ id: uid('m'), account: username, title: titleName, status: '在任', joined: today() }, profile));
+      added++;
+    }
   });
-  return { added, skipped, messages };
+  return { added, updated, skipped, messages };
 }
