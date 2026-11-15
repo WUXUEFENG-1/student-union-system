@@ -38,6 +38,21 @@ function ensureFlow(a) {
   if (!Array.isArray(a.flow) || !a.flow.length) a.flow = resignFlow(a.title);
 }
 
+/* ---------- 公假证明动态审批链：按申请人职务分流 ---------- */
+function plFlow(title) {
+  const t = normalizeTitle(title);
+  if (t === '副部长') return ['部长审核', '主席审核'];
+  if (t === '部长') return ['主席审核'];
+  if (t === '副主席') return ['主席审核'];
+  if (t === '主席') return ['责任教师审核'];
+  return ['部长审核', '主席团审核确认签字'];
+}
+function ensurePlFlow(a) {
+  if (a.type !== 'publicLeave') return;
+  if (!Array.isArray(a.flow) || !a.flow.length) a.flow = plFlow(a.title);
+}
+APPLY_TYPES.publicLeave.hint = '按申请人职务分流：副部长经部长、主席签字；部长、副主席经主席签字；主席由责任教师终审；成员经部长、主席团签字。活动名称、时间、地点全部本人手工填写，不与系统活动模块关联校验；公假证明仅作纸质材料，不自动生成请假记录，请假需另行单独提交请假申请。';
+
 /* 审批人身份称谓（导出表落款用） */
 function nodeIdentity(label, dept) {
   switch (label) {
@@ -48,6 +63,22 @@ function nodeIdentity(label, dept) {
     case '责任教师审核': return '责任教师';
     default: return label;
   }
+}
+
+/* 按审批人姓名反查其职务称谓（公假证明导出落款用） */
+function actorIdentity(name) {
+  if (!name) return '';
+  const acc = (db.accounts || []).find((x) => x.name === name);
+  const mem = (db.members || []).find((x) => x.name === name);
+  const rec = acc || mem || {};
+  if (rec.role === 'teacher') return '责任教师';
+  const t = normalizeTitle(rec.title || '');
+  const dept = rec.dept || '';
+  if (t === '部长') return `是我系学生会 ${dept} 部长`;
+  if (t === '副部长') return `是我系学生会 ${dept} 副部长`;
+  if (t === '副主席') return '是我系学生会副主席';
+  if (t === '主席') return '是我系学生会主席';
+  return rec.title || ROLE_NAMES[rec.role] || name;
 }
 
 /* 是否为当前用户本人提交的申请（本人不可审批本人） */
@@ -77,6 +108,19 @@ canApprove = function (a) {
     if (a.stage === 1) return t === '部长';
     if (a.stage === 2) return t === '副主席';
     if (a.stage === 3) return t === '主席';
+    return false;
+  }
+  if (a.type === 'publicLeave') {
+    ensurePlFlow(a);
+    const node = RESIGN_NODES[a.flow[a.stage]];
+    if (node) {
+      if (node.role === 'teacher') return cur.role === 'teacher';
+      if (node.role === 'minister') return cur.role === 'minister' && cur.title === node.title && cur.dept === a.dept;
+      if (node.role === 'presidium') return cur.title === node.title;
+      return false;
+    }
+    if (cur.role === 'minister') return a.stage === 0;
+    if (cur.role === 'presidium') return a.stage === 1;
     return false;
   }
   return _canApprove6(a);
@@ -155,6 +199,67 @@ function openResignApproveForm(a) {
     rd.readAsDataURL(f);
   };
 }
+
+/* ---------- 2b) 公假证明审批弹窗：按动态 flow 节点流转 ---------- */
+const _openApproveForm6 = openApproveForm;
+openApproveForm = function (a) {
+  if (a.type !== 'publicLeave') return _openApproveForm6(a);
+  ensurePlFlow(a);
+  const cfg = APPLY_TYPES[a.type];
+  const flow = a.flow || cfg.stages;
+  const stageLabel = flow[a.stage] || cfg.stages[a.stage] || '';
+  let signFile = '';
+  let canvasDirty = false;
+  const body = openForm({
+    title: stageLabel + ' · ' + a.name,
+    hint: '请在下方手写签字（或上传签字图片），填写联系电话与审批意见，确认后通过审批。',
+    fields: [
+      { key: 'phone', label: '联系电话', required: true },
+      { key: 'opinion', label: '审批意见', type: 'textarea' }
+    ],
+    extra: `<div class="field"><label>手写签字（可直接在线书写，或点“选择文件”上传签字图片）</label>
+      <canvas id="apCanvas" width="320" height="120" style="border:1px solid #d9e2ec;border-radius:8px;background:#fff;touch-action:none"></canvas>
+      <div class="row-actions" style="margin-top:8px">
+        <button type="button" class="link-btn" id="apClear">清除重写</button>
+        <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
+      </div></div>`,
+    onSubmit(d) {
+      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
+      if (!d.phone) { toast('请填写联系电话'); return; }
+      const signs = (a.approveSigns = a.approveSigns || []);
+      signs.push({ sign: signData, phone: d.phone, opinion: d.opinion || '', actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel, time: today() });
+      if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = d.phone; }
+      else { a.signChair = signData; a.phoneChair = d.phone; }
+      const last = a.stage >= flow.length - 1;
+      const trackNote = '电话：' + d.phone + (d.opinion ? '；意见：' + d.opinion : '');
+      a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: trackNote, time: today() });
+      if (last) { a.status = '已通过'; applyApproved(a); }
+      else { a.stage += 1; a.status = '审核中'; }
+      commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
+      save(); render();
+      toast(last ? '申请已通过' : '已流转至下一审批节点');
+    }
+  });
+  const cv = body.querySelector('#apCanvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return { x: p.clientX - r.left, y: p.clientY - r.top }; };
+  cv.addEventListener('pointerdown', (e) => { drawing = true; canvasDirty = true; ctx.beginPath(); const p = pos(e); ctx.moveTo(p.x, p.y); });
+  cv.addEventListener('pointermove', (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  const stop = () => { drawing = false; };
+  cv.addEventListener('pointerup', stop);
+  cv.addEventListener('pointerleave', stop);
+  body.querySelector('#apClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); canvasDirty = false; };
+  body.querySelector('#apSign').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
+    const rd = new FileReader();
+    rd.onload = () => { signFile = rd.result; };
+    rd.readAsDataURL(f);
+  };
+};
 
 /* ---------- 3) 申请表单：手写签名板 + 上传签字照片 ---------- */
 const _openForm6 = openForm;
@@ -657,3 +762,36 @@ function printResign(a) {
     setTimeout(() => wrap.remove(), 1200);
   }, 150);
 }
+
+/* ---------- 8) 公假证明导出：落款按审批人岗位称谓签字 ---------- */
+plProofHtml = function (a) {
+  const v = a.values || {};
+  const map = {
+    '{姓名}': a.name, '{学号}': a.sno || '—', '{专业}': a.major || '—', '{班级}': a.class || '—',
+    '{所属部门}': a.dept || '—', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
+    '{活动地点}': v.place || '—', '{请假课程及日期}': v.courses || '—', '{申请说明}': v.explanation || '—',
+    '{联系电话}': v.phone || '—', '{申请份数与用途}': v.copiesPurpose || '—',
+    '{证明编号}': a.proofNo || '—', '{出具日期}': cnDate(a.approvedAt)
+  };
+  let body = plTemplate().body;
+  Object.keys(map).forEach((k) => { body = body.split(k).join(String(map[k] == null ? '—' : map[k])); });
+  const lines = esc(body).split('\n');
+  const paras = lines.map((ln, i) => `<p style="margin:0 0 ${i === 0 ? '18px' : '12px'};${i === 0 ? '' : 'text-indent:2em'}">${ln}</p>`).join('');
+  const signs = (a.approveSigns || []).filter((s) => s && s.sign);
+  const signBlock = signs.length ? signs.map((s) => {
+    const id = actorIdentity(s.actor) || s.actor;
+    const img = s.sign ? `<img src="${s.sign}" style="height:28px;vertical-align:middle">` : '____________';
+    const ph = s.phone ? `　联系电话：${esc(s.phone)}` : '';
+    return `<p style="margin:0 0 14px">${esc(id)}（签字）：${img}${ph}</p>`;
+  }).join('') : '<p style="margin:0 0 14px">负责人签字：____________</p>';
+  return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:16pt;line-height:1.9;max-width:760px;margin:0 auto;padding:32px 24px">
+    <h2 style="text-align:center;font-size:18pt;font-weight:bold;margin:0 0 28px">${esc(plTemplate().title || '证明')}</h2>
+    ${paras}
+    <div style="margin-top:40px;padding-left:2em">
+      ${signBlock}
+      <p style="margin:0 0 18px">联系电话：${esc(map['{联系电话}'])}</p>
+      <p style="margin:0 0 18px">日期：${esc(map['{出具日期}'])}</p>
+      <p style="margin:0 0 18px">编号：${esc(a.proofNo || '—')}</p>
+    </div>
+  </div>`;
+};
