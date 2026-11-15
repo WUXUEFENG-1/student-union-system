@@ -150,13 +150,15 @@ openForm = function (opts) {
     photoField.className = 'field';
     photoField.innerHTML = '<label>一寸证件照（上传后自动填入申请表照片位）</label><input type="file" id="elPhoto" accept="image/png,image/jpeg,image/jpg" class="file-input">';
     body.appendChild(photoField);
-    body.querySelector('#elPhoto').onchange = (e) => {
+    body.querySelector('#elPhoto').onchange = async (e) => {
       const f = e.target.files[0];
       if (!f) return;
       if (f.size > 5 * 1024 * 1024) { toast('证件照请控制在 5MB 以内'); return; }
-      const rd = new FileReader();
-      rd.onload = () => { const h = body.querySelector('#f_photo'); if (h) h.value = rd.result; };
-      rd.readAsDataURL(f);
+      try {
+        const dataUrl = await compressImage(f, 600, 0.85);
+        const h = body.querySelector('#f_photo');
+        if (h) h.value = dataUrl;
+      } catch (err) { toast('图片读取失败，请更换一张证件照'); }
     };
     const origSubmit = modalSubmit;
     modalSubmit = function () {
@@ -169,10 +171,19 @@ openForm = function (opts) {
 
 /* ================= 审批：各节点采集签字、电话（仅公假证明）与审批意见 ================= */
 
-/* 节点审批权限：管理员/主席团可审批后续节点；部长/副部长仅能审批第一节点，不可代审 */
+/* 节点审批权限：按四级岗位严格限定可审节点，不可跨级代审 */
 function canApprove(a) {
-  if (allPower()) return true;
+  if (cur.role === 'admin') return true;
+  if (a.type === 'election') {
+    const t = cur.title || '';
+    if (a.stage === 0) return t === '副部长';
+    if (a.stage === 1) return t === '部长';
+    if (a.stage === 2) return t === '副主席';
+    if (a.stage === 3) return t === '主席';
+    return false;
+  }
   if (cur.role === 'minister') return a.stage === 0;
+  if (cur.role === 'presidium') return a.stage === 1;
   return false;
 }
 
@@ -249,6 +260,42 @@ function rebindApprovePass() {
   });
 }
 
+/* 详情弹窗：按中文标签展示竞选/各类申请，证件照直接显示 */
+function openApplyInfo(a) {
+  const v = a.values || {};
+  const p = personOf(a);
+  const auto = [
+    ['姓名', a.name], ['学号', a.sno], ['性别', p.gender || '—'], ['班级', a.class],
+    ['民族', p.ethnicity || '—'], ['政治面貌', p.politics || '—'], ['联系方式', p.phone || '—']
+  ];
+  let rows = auto.map(([l, val]) => `<div><span>${esc(l)}</span><strong>${esc(val)}</strong></div>`).join('');
+  const cfg = APPLY_TYPES[a.type];
+  if (cfg && cfg.fields) {
+    rows += cfg.fields.filter((f) => f.key !== 'photo').map((f) =>
+      `<div><span>${esc(f.label)}</span><strong>${esc(v[f.key] || '—')}</strong></div>`).join('');
+  }
+  if (v.photo) rows += `<div><span>一寸证件照</span><img src="${v.photo}" style="height:96px;border:1px solid #d9e2ec;border-radius:6px"></div>`;
+  const trackHtml = (a.track || []).map((t) =>
+    `<div class="perm-item"><span class="dot"></span>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div>`).join('')
+    || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>';
+  const extra = (a.type === 'election' && a.status === '已通过')
+    ? `<div class="row-actions" style="margin-top:12px"><button class="primary-btn light" id="elExportBtn">导出申请表</button></div>` : '';
+  openInfo(a.typeName + ' · ' + a.name,
+    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批轨迹</div><div class="perm-list">${trackHtml}</div>`,
+    '提交时间：' + a.date);
+  const btn = document.getElementById('elExportBtn');
+  if (btn) btn.onclick = () => electionExportPicker(a);
+}
+
+function rebindApplyView() {
+  document.querySelectorAll('[data-apply-view]').forEach((btn) => {
+    btn.onclick = () => {
+      const a = db.applies.find((x) => x.id === btn.dataset.applyView);
+      if (a) openApplyInfo(a);
+    };
+  });
+}
+
 /* 部门台账兜底：成员中存在、但部门信息表缺失的部门，按部长/主席补齐记录 */
 function ensureDeptRoster() {
   if (!db || !db.members) return;
@@ -287,17 +334,23 @@ render = function () {
       if (tds.length > th && tds[0].textContent.trim() === '') tds[0].remove();
     });
   });
-  // 部长/副部长仅能审批第一节点；已流转到主席团节点的记录不再出现在部长待办
-  if (cur.role === 'minister') {
+  // 待办列表：部长/副部长只看部门节点，主席团只看主席团节点，不跨级显示
+  if (cur.role === 'minister' || cur.role === 'presidium') {
     document.querySelectorAll('.card').forEach((card) => {
       const h2 = card.querySelector('h2');
-      if (h2 && h2.textContent.includes('待我审批')) {
-        card.querySelectorAll('tbody tr').forEach((tr) => {
-          const btn = tr.querySelector('[data-apply-pass],[data-apply-reject]');
-          const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyPass || btn.dataset.applyReject));
-          if (a && a.stage > 0) tr.remove();
-        });
-      }
+      if (!h2 || !h2.textContent.includes('待我审批')) return;
+      card.querySelectorAll('tbody tr').forEach((tr) => {
+        const btn = tr.querySelector('[data-apply-pass],[data-apply-reject]');
+        const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyPass || btn.dataset.applyReject));
+        if (!a) return;
+        let show;
+        if (a.type === 'election') {
+          show = cur.role === 'minister' ? a.stage <= 1 : a.stage >= 2;
+        } else {
+          show = cur.role === 'minister' ? a.stage === 0 : a.stage === 1;
+        }
+        if (!show) tr.remove();
+      });
     });
   }
   // 部门信息表 / 人员信息表：非主席团、管理员、责任教师仅可见本部门
@@ -344,6 +397,7 @@ render = function () {
     };
   }
   rebindApprovePass();
+  rebindApplyView();
 };
 
 /* ================= 证明导出版式（按上传模板排版） ================= */
@@ -380,38 +434,245 @@ plProofHtml = function (a) {
   </div>`;
 };
 
-/* ================= 换届竞选申请表导出（按上传 docx 版式） ================= */
+/* ================= 换届竞选申请表导出：生成内嵌签字与照片的 .docx ================= */
 
-function electionProofHtml(a) {
-  const v = a.values || {};
-  const p = personOf(a);
-  const sig = (stage) => signOf(a, stage) ? `<img src="${signOf(a, stage)}" style="height:40px;vertical-align:middle">` : '____________';
-  const op = (stages) => stages.map((s) => opinionOf(a, s)).filter(Boolean).join('；') || '—';
-  const cell = (t) => `<td style="border:1px solid #333;padding:6px 10px">${esc(t || '—')}</td>`;
-  const lab = (t) => `<td style="border:1px solid #333;padding:6px 10px;background:#f2f5fa;font-weight:600">${esc(t)}</td>`;
-  const photoCell = v.photo ? `<img src="${v.photo}" style="width:100%;height:100%;object-fit:cover;display:block">` : '一寸照';
-  return `<div style="font-family:'FangSong','方正仿宋_GBK','仿宋',serif;font-size:14pt;max-width:760px;margin:0 auto;padding:24px">
-    <h2 style="text-align:center;margin:0 0 20px">应用经济系学生会换届报名申请表</h2>
-    <table style="width:100%;border-collapse:collapse">
-      <tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}<td rowspan="3" style="border:1px solid #333;width:120px;height:150px;text-align:center;vertical-align:middle">${photoCell}</td></tr>
-      <tr>${lab('学号')}${cell(a.sno)}${lab('联系方式')}${cell(p.phone)}</tr>
-      <tr>${lab('班级')}${cell(a.class)}${lab('民族')}${cell(p.ethnicity)}</tr>
-      <tr>${lab('政治面貌')}${cell(p.politics)}${lab('竞选岗位')}${cell(v.title)}<td></td></tr>
-      <tr>${lab('个人特长')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.talents || '—')}</td></tr>
-      <tr>${lab('个人简介')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.intro || '—')}</td></tr>
-      <tr>${lab('部门认识')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.deptKnow || '—')}</td></tr>
-      <tr>${lab('部门初审')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">意见：${op(['副部长审核', '部长审核'])}<br>部长签字：${sig('部长审核')}　　副部长签字：${sig('副部长审核')}</td></tr>
-      <tr>${lab('主席团意见')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">意见：${op(['副主席审核', '主席审核'])}<br>主席签字：${sig('主席审核')}　　副主席签字：${sig('副主席审核')}</td></tr>
-    </table>
-  </div>`;
+/* 图片压缩：等比缩放到上限尺寸并按 JPEG 导出，保证入库数据小于 5MB */
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(cv.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    img.src = url;
+  });
 }
 
-function exportElection(a) {
-  const html = electionProofHtml(a);
-  const pageStyle = '@page{size:A4;margin:2.54cm 3.17cm}';
-  const doc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>${pageStyle}</style></head><body>${html}</body></html>`;
-  downloadBlob(new Blob(['\ufeff' + doc], { type: 'application/msword;charset=utf-8' }), `换届申请表_${a.name}_${a.sno}.doc`);
-  commit('导出换届申请表', `${a.typeName} · ${a.name}`);
+function dataUrlBytes(u) {  const b = String(u || '').split(',')[1] || '';
+  const bin = atob(b);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+function crc32(bytes) {
+  let c = ~0;
+  for (let i = 0; i < bytes.length; i++) {
+    c ^= bytes[i];
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & (-(c & 1)));
+  }
+  return (~c) >>> 0;
+}
+
+function buildZip(files) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  files.forEach((f) => {
+    const name = enc.encode(f.name);
+    const data = f.data;
+    const localOffset = offset;
+    const crc = crc32(data);
+    const lh = new Uint8Array(30);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0x21, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, name.length, true);
+    lv.setUint16(28, 0, true);
+    chunks.push(lh, name, data);
+    const ch = new Uint8Array(46);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0x21, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, name.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint16(38, 0, true);
+    cv.setUint32(42, localOffset, true);
+    central.push(ch, name);
+    offset += 30 + name.length + data.length;
+  });
+  let cdSize = 0;
+  central.forEach((c) => cdSize += c.length);
+  const eh = new Uint8Array(22);
+  const ev = new DataView(eh.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+  return new Blob([...chunks, ...central, eh], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+function buildElectionDocx(a) {
+  const v = a.values || {};
+  const p = personOf(a);
+  const media = [];
+  const addMedia = (url) => {
+    if (!url) return '';
+    const rid = 'rId' + (media.length + 1);
+    const ext = /png/i.test(url) ? 'png' : 'jpeg';
+    media.push({ rid, name: 'word/media/image' + media.length + '.' + ext, bytes: dataUrlBytes(url) });
+    return rid;
+  };
+  const escXml = (s) => esc(s);
+  const run = (text, o) => `<w:r><w:rPr>${(o && o.bold) ? '<w:b/>' : ''}<w:sz w:val="${(o && o.size) || 21}"/></w:rPr><w:t xml:space="preserve">${escXml(text)}</w:t></w:r>`;
+  const imgRun = (rid, w, h) => `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="${media.length + 1}" name="img${media.length + 1}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="img"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+  const cell = (content, opts) => {
+    opts = opts || {};
+    const span = opts.span || 1;
+    const vm = opts.vMerge;
+    let pr = `<w:tcPr><w:tcW w:w="1807" w:type="dxa"/>`;
+    if (span > 1) pr += `<w:gridSpan w:val="${span}"/>`;
+    if (vm) pr += `<w:vMerge w:val="${vm}"/>`;
+    pr += '</w:tcPr>';
+    return `<w:tc>${pr}<w:p>${content || ''}</w:p></w:tc>`;
+  };
+
+  const photoRid = addMedia(v.photo);
+  const signRid = {};
+  ['副部长审核', '部长审核', '副主席审核', '主席审核'].forEach((s) => { signRid[s] = addMedia(signOf(a, s)); });
+  const sigImg = (s) => signRid[s] ? imgRun(signRid[s], 720000, 360000) : '____________';
+  const op = (arr) => arr.map((x) => opinionOf(a, x)).filter(Boolean).join('；') || '—';
+
+  const c7 = run(`意见：${op(['副部长审核', '部长审核'])}`) + '<w:r><w:br/></w:r>' + run('部长（签字）：') + sigImg('部长审核') + run('　　副部长（签字）：') + sigImg('副部长审核');
+  const c8 = run(`意见：${op(['副主席审核', '主席审核'])}`) + '<w:r><w:br/></w:r>' + run('主席（签字）：') + sigImg('主席审核') + run('　　副主席（签字）：') + sigImg('副主席审核');
+
+  const rows = [
+    `<w:tr>${cell(run('姓    名', { bold: true }))}${cell(run(a.name))}${cell(run('性    别', { bold: true }))}${cell(run(p.gender || '—'))}${cell(photoRid ? imgRun(photoRid, 900000, 1260000) : '', { vMerge: 'restart' })}</w:tr>`,
+    `<w:tr>${cell(run('学    号', { bold: true }))}${cell(run(a.sno))}${cell(run('联系方式', { bold: true }))}${cell(run(p.phone || '—'))}${cell('', { vMerge: 'continue' })}</w:tr>`,
+    `<w:tr>${cell(run('班    级', { bold: true }))}${cell(run(a.class), { span: 2 })}${cell(run('民  族', { bold: true }))}${cell(run(p.ethnicity || '—'))}${cell('', { vMerge: 'continue' })}</w:tr>`,
+    `<w:tr>${cell(run('政治面貌', { bold: true }))}${cell(run(p.politics || '—'))}${cell(run('竞选岗位', { bold: true }))}${cell(run(v.title || '—'), { span: 3 })}</w:tr>`,
+    `<w:tr>${cell(run('个人特长', { bold: true }))}${cell(run(v.talents || '—'), { span: 5 })}</w:tr>`,
+    `<w:tr>${cell(run('个人简介', { bold: true }))}${cell(run(v.intro || '—'), { span: 5 })}</w:tr>`,
+    `<w:tr>${cell(run('部门认识', { bold: true }))}${cell(run(v.deptKnow || '—'), { span: 5 })}</w:tr>`,
+    `<w:tr>${cell(run('部门初审', { bold: true }))}${cell(c7, { span: 5 })}</w:tr>`,
+    `<w:tr>${cell(run('主席团意见', { bold: true }))}${cell(c8, { span: 5 })}</w:tr>`
+  ].join('');
+
+  const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
+    .map((b) => `<w:${b} w:val="single" w:sz="4" w:space="0" w:color="333333"/>`).join('');
+
+  const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:body>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>应用经济系学生会换届报名申请表</w:t></w:r></w:p>
+<w:tbl><w:tblPr><w:tblW w:w="9036" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>
+<w:tblGrid><w:gridCol w:w="1807"/><w:gridCol w:w="1807"/><w:gridCol w:w="1807"/><w:gridCol w:w="1807"/><w:gridCol w:w="1807"/></w:tblGrid>
+${rows}
+</w:tbl>
+</w:body></w:document>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${media.map((m) => `<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${m.name.replace(/^word\//, '')}"/>`).join('')}
+</Relationships>`;
+
+  const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  const enc = new TextEncoder();
+  const files = [
+    { name: '[Content_Types].xml', data: enc.encode(ct) },
+    { name: '_rels/.rels', data: enc.encode(rootRels) },
+    { name: 'word/document.xml', data: enc.encode(docXml) },
+    { name: 'word/_rels/document.xml.rels', data: enc.encode(rels) }
+  ];
+  media.forEach((m) => files.push({ name: m.name, data: m.bytes }));
+  return buildZip(files);
+}
+
+function electionPrintHtml(a) {
+  const v = a.values || {};
+  const p = personOf(a);
+  const sig = (s) => signOf(a, s) ? `<img src="${signOf(a, s)}" style="height:34px;vertical-align:middle">` : '____________';
+  const op = (arr) => arr.map((x) => opinionOf(a, x)).filter(Boolean).join('；') || '—';
+  const cell = (t) => `<td style="border:1px solid #333;padding:6px 10px">${esc(t || '—')}</td>`;
+  const lab = (t) => `<td style="border:1px solid #333;padding:6px 10px;background:#f2f5fa;font-weight:600">${esc(t)}</td>`;
+  const photo = v.photo ? `<img src="${v.photo}" style="width:100%;height:100%;object-fit:cover">` : '一寸照';
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>换届申请表_${esc(a.name)}</title>
+  <style>@page{size:A4;margin:2cm}body{font-family:'FangSong','仿宋',serif;padding:16px}h2{text-align:center}table{border-collapse:collapse;width:100%}td{vertical-align:middle}</style></head>
+  <body><h2>应用经济系学生会换届报名申请表</h2>
+  <table>
+    <tr>${lab('姓名')}${cell(a.name)}${lab('性别')}${cell(p.gender)}<td rowspan="3" style="border:1px solid #333;width:120px;height:150px;text-align:center">${photo}</td></tr>
+    <tr>${lab('学号')}${cell(a.sno)}${lab('联系方式')}${cell(p.phone)}</tr>
+    <tr>${lab('班级')}${cell(a.class)}${lab('民族')}${cell(p.ethnicity)}</tr>
+    <tr>${lab('政治面貌')}${cell(p.politics)}${lab('竞选岗位')}${cell(v.title)}<td></td></tr>
+    <tr>${lab('个人特长')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.talents || '—')}</td></tr>
+    <tr>${lab('个人简介')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.intro || '—')}</td></tr>
+    <tr>${lab('部门认识')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">${esc(v.deptKnow || '—')}</td></tr>
+    <tr>${lab('部门初审')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">意见：${op(['副部长审核', '部长审核'])}<br>部长（签字）：${sig('部长审核')}　　副部长（签字）：${sig('副部长审核')}</td></tr>
+    <tr>${lab('主席团意见')}<td colspan="4" style="border:1px solid #333;padding:6px 10px">意见：${op(['副主席审核', '主席审核'])}<br>主席（签字）：${sig('主席审核')}　　副主席（签字）：${sig('副主席审核')}</td></tr>
+  </table></body></html>`;
+}
+
+function electionExportPicker(a) {
+  $('#modalTitle').textContent = '导出：' + a.typeName;
+  $('#modalOk').classList.add('hidden');
+  $('#modalCancel').textContent = '关闭';
+  modalSubmit = null;
+  $('#modalBody').innerHTML = `<p class="form-hint">选择导出格式，签字与证件照将一并写入文件。</p>
+    <div class="export-grid">
+      <button class="primary-btn" id="elWord">导出 Word（.docx）</button>
+      <button class="primary-btn light" id="elPdf">导出 PDF（打印另存）</button>
+    </div>`;
+  $('#modalMask').classList.remove('hidden');
+  $('#elWord').onclick = () => {
+    const blob = buildElectionDocx(a);
+    downloadBlob(blob, `换届申请表_${a.name}_${a.sno}.docx`);
+    commit('导出换届申请表', `${a.typeName} · ${a.name}`);
+    closeModal();
+    toast('已导出 Word 文档');
+  };
+  $('#elPdf').onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { toast('请允许浏览器弹出窗口后再导出 PDF'); return; }
+    w.document.write(electionPrintHtml(a));
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+    commit('导出换届申请表 PDF', `${a.typeName} · ${a.name}`);
+  };
 }
 
 /* 详情弹窗：补显审批签字与电话（只读）；竞选终审通过后提供导出按钮 */
@@ -433,14 +694,5 @@ openInfo = function (title, html, foot) {
       p.textContent = rows.join('　｜　');
       box.appendChild(p);
     }
-  }
-  if (rec && rec.type === 'election' && rec.status === '已通过') {
-    const box = document.getElementById('modalBody');
-    const btn = document.createElement('button');
-    btn.className = 'primary-btn light';
-    btn.style.marginTop = '12px';
-    btn.textContent = '导出申请表';
-    btn.onclick = () => exportElection(rec);
-    box.appendChild(btn);
   }
 };
