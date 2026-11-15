@@ -195,9 +195,28 @@ function rebindApprovePass() {
   });
 }
 
+/* 部门台账兜底：成员中存在、但部门信息表缺失的部门，按部长/主席补齐记录 */
+function ensureDeptRoster() {
+  if (!db || !db.members) return;
+  const known = new Set(db.departments.map((d) => d.name));
+  db.members.forEach((m) => {
+    if (!m.dept || known.has(m.dept)) return;
+    const head = db.members.find((x) => x.dept === m.dept && (x.title === '部长' || x.title === '主席'));
+    db.departments.push({
+      id: 'd_' + m.dept,
+      name: m.dept,
+      leader: head ? head.name : '—',
+      desc: '部门事务统筹与成员管理。',
+      status: '正常'
+    });
+    known.add(m.dept);
+  });
+}
+
 /* 包装 render：隐藏历史入会申请（仅主席团 / 管理员可见），并重绑审批按钮 */
 const _renderPatch = render;
 render = function () {
+  ensureDeptRoster();
   _renderPatch();
   document.querySelectorAll('.card').forEach((card) => {
     const h = card.querySelector('h2');
