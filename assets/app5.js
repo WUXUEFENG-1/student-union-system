@@ -416,7 +416,7 @@ plProofHtml = function (a) {
   const phoneMinister = a.phoneMinister || (signs[0] && signs[0].phone) || v.phone || '—';
   const phoneChair = a.phoneChair || (signs[1] && signs[1].phone) || v.phone || '—';
   const paras = [
-    `兹有${major}专业${a.class}学生${a.name}，学号：${a.sno}，是我系学生会${a.dept || '—'}成员，于${v.period || '—'}在${v.place || '—'}参加「${v.activityName || '—'}」活动。`,
+    `兹有${major}专业${a.class}班学生${a.name}，学号：${a.sno}，是我系学生会${a.dept || '—'}${a.title || '成员'}，于${v.period || '—'}在${v.place || '—'}参加「${v.activityName || '—'}」活动。`,
     `因参加本次活动，需请假课程为：${v.courses || '—'}。`,
     '活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。',
     '特此证明。'
