@@ -56,10 +56,10 @@ APPLY_TYPES.publicLeave.hint = '按申请人职务分流：副部长经部长、
 /* 审批人身份称谓（导出表落款用） */
 function nodeIdentity(label, dept) {
   switch (label) {
-    case '副部长审核': return `是我系学生会 ${dept || ''} 副部长`;
-    case '部长审核': return `是我系学生会 ${dept || ''} 部长`;
-    case '副主席审核': return '是我系学生会副主席';
-    case '主席审核': return '是我系学生会主席';
+    case '副部长审核': return '副部长';
+    case '部长审核': return '部长';
+    case '副主席审核': return '副主席';
+    case '主席审核': return '主席';
     case '责任教师审核': return '责任教师';
     default: return label;
   }
@@ -632,7 +632,7 @@ function buildResignDocx(a) {
     if (!labels.length) return '';
     let html = run(`意见：${op(labels)}`);
     labels.forEach((s) => {
-      html += '<w:r><w:br/></w:r>' + run(nodeIdentity(s, deptName) + '（签字）：') + sigImg(s);
+      html += '<w:r><w:br/></w:r>' + run(nodeIdentity(s, deptName) + '签字：') + sigImg(s);
     });
     html += '<w:r><w:br/></w:r>' + run(`日期：${dateStr}`);
     return html;
@@ -719,7 +719,7 @@ function resignPrintBody(a) {
   const statement = '本人自愿申请退出应用经济系学生会。退出后不再以系学生会成员身份参与工作，已交回学生会配发物资、在办事项及相关工作资料，无遗留纠纷。';
   const groupRow = (label, labels) => {
     if (!labels.length) return '';
-    const lines = labels.map((s) => `${nodeIdentity(s, deptName)}（签字）：${sig(s)}`).join('　　');
+    const lines = labels.map((s) => `${nodeIdentity(s, deptName)}签字：${sig(s)}`).join('　　');
     return `<tr>${lab(label)}${wide(`意见：${op(labels)}<br>${lines}<br>日期：${dateStr}`)}</tr>`;
   };
   const deptNodes = flow.filter((s) => RESIGN_NODES[s] && RESIGN_NODES[s].role === 'minister');
