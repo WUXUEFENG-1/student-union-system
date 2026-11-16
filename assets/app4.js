@@ -219,10 +219,21 @@ function exportPublicLeave(a, fmt, archive) {
 function applyRow(a, review) {
   const canReview = allPower() || (cur.role === 'minister' && a.dept === cur.dept);
   const pending = ['待审核', '审核中', '待分派', '处理中'].includes(a.status);
+  const stage0 = (a.stage || 0) === 0;
+  const terminalRejected = ['已驳回', '已撤回', '已作废'].includes(a.status);
+  const withdrawable = !review && stage0 && pending;
+  const deletable = !review && (stage0 || terminalRejected);
+  const editable = !review && a.status === '已驳回';
   const ops = [];
   ops.push(`<button class="link-btn" data-apply-view="${a.id}">查看</button>`);
-  if (!review && ['待审核', '审核中', '待分派', '处理中'].includes(a.status)) {
+  if (editable) {
+    ops.push(`<button class="link-btn" data-apply-edit="${a.id}">重新编辑</button>`);
+  }
+  if (withdrawable) {
     ops.push(`<button class="link-btn del" data-apply-cancel="${a.id}">撤回</button>`);
+  }
+  if (deletable) {
+    ops.push(`<button class="link-btn del" data-apply-del="${a.id}">删除</button>`);
   }
   if (review && canReview && pending) {
     ops.push(`<button class="link-btn" data-apply-pass="${a.id}">通过</button>`);
@@ -277,7 +288,7 @@ function renderJoin() {
           <tr><td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
             <td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td>
             <td>${badge(a.status)}</td><td>${esc(a.proofNo || '—')}</td>
-            <td><div class="row-actions"><button class="link-btn" data-apply-view="${a.id}">查看</button></div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">暂无已终审公假证明</td></tr>'}</tbody>
+            <td><div class="row-actions"><button class="link-btn" data-apply-view="${a.id}">查看</button>${cur.role === 'presidium' ? `<button class="link-btn del" data-archive-del="${a.id}">删除</button>` : ''}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">暂无已终审公假证明</td></tr>'}</tbody>
       </table></div>
     </div>` : ''}
     <div class="card">
@@ -315,10 +326,10 @@ function renderJoin() {
     });
   };
 
-  function applyForm(key) {
+  function applyForm(key, existing) {
     const cfg = APPLY_TYPES[key];
     const isPL = key === 'publicLeave';
-    let attachName = '';
+    let attachName = existing && existing.values ? existing.values.attach || '' : '';
     const presetExplain = '活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。';
     const autoInfo = isPL ? `<div class="info-list" style="margin-bottom:10px">
       <div><span>姓名（自动带出）</span><strong>${esc(cur.name)}</strong></div>
@@ -328,19 +339,29 @@ function renderJoin() {
       <div><span>所属部门（自动带出）</span><strong>${esc(cur.dept || '—')}</strong></div>
     </div>` : '';
     const body = openForm({
-      title: cfg.name,
+      title: existing ? cfg.name + ' · 重新编辑' : cfg.name,
       hint: cfg.hint,
       fields: cfg.fields,
       extra: autoInfo + (isPL ? '<div class="field"><label>活动通知或策划附件（选填）</label><input type="file" id="plAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>' : ''),
-      values: { toDept: cur.dept, toTitle: cur.title, targetDept: cur.dept, anonymous: '实名', category: '建议', obey: '是', agree: '否', handoverDone: '是', leaveType: '自愿申请', explanation: presetExplain, phone: cur.phone || '', copiesPurpose: '1 份，用于课程请假备案' },
+      values: Object.assign({ toDept: cur.dept, toTitle: cur.title, targetDept: cur.dept, anonymous: '实名', category: '建议', obey: '是', agree: '否', handoverDone: '是', leaveType: '自愿申请', explanation: presetExplain, phone: cur.phone || '', copiesPurpose: '1 份，用于课程请假备案' }, existing ? existing.values : {}),
       onSubmit(d) {
         if (isPL) d.attach = attachName;
-        db.applies.push({
-          id: uid('ap'), type: key, typeName: cfg.name, name: cur.name, sno: cur.sno || '—', major: cur.major || '—', class: cur.class || '—', dept: cur.dept, title: cur.title,
-          values: d, date: today(), status: key === 'feedback' ? '待分派' : '待审核', stage: 0, locked: false,
-          track: [{ actor: cur.name, role: ROLE_NAMES[cur.role], action: '提交申请', note: '', time: today() }]
-        });
-        commit('提交申请', `${cfg.name} · ${cur.name}`); render(); toast('申请已提交');
+        if (existing) {
+          existing.values = d;
+          existing.status = existing.type === 'feedback' ? '待分派' : '待审核';
+          existing.stage = 0;
+          existing.locked = false;
+          existing.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '修改并重新提交', note: '', time: today() });
+          commit('重新编辑申请', `${cfg.name} · ${cur.name}`);
+        } else {
+          db.applies.push({
+            id: uid('ap'), type: key, typeName: cfg.name, name: cur.name, sno: cur.sno || '—', major: cur.major || '—', class: cur.class || '—', dept: cur.dept, title: cur.title,
+            values: d, date: today(), status: key === 'feedback' ? '待分派' : '待审核', stage: 0, locked: false,
+            track: [{ actor: cur.name, role: ROLE_NAMES[cur.role], action: '提交申请', note: '', time: today() }]
+          });
+          commit('提交申请', `${cfg.name} · ${cur.name}`);
+        }
+        render(); toast(existing ? '已修改并重新提交，等待审批' : '申请已提交');
       }
     });
     if (isPL) body.querySelector('#plAttach').onchange = (e) => { attachName = e.target.files[0] ? e.target.files[0].name : ''; };
@@ -384,10 +405,39 @@ function renderJoin() {
   document.querySelectorAll('[data-apply-cancel]').forEach((b) => {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyCancel);
+      if (!a) return;
+      if ((a.stage || 0) > 0) { toast('该申请已开始审批，不可撤回'); return; }
       if (!confirm('确定撤回这条申请？一级审批人处理后不可再撤回。')) return;
       a.status = '已撤回';
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '申请人撤回', note: '', time: today() });
       commit('撤回申请', `${a.typeName} · ${a.name}`); save(); render(); toast('申请已撤回');
+    };
+  });
+  document.querySelectorAll('[data-apply-del]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyDel);
+      if (!a) return;
+      if ((a.stage || 0) > 0) { toast('该申请已开始审批，不可删除'); return; }
+      if (!confirm(`确定删除「${a.typeName} · ${a.name}」？删除后记录不可恢复。`)) return;
+      db.applies = db.applies.filter((x) => x.id !== a.id);
+      commit('删除申请', `${a.typeName} · ${a.name}`); save(); render(); toast('申请已删除');
+    };
+  });
+  document.querySelectorAll('[data-apply-edit]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyEdit);
+      if (!a) return;
+      if (a.status !== '已驳回') { toast('仅已驳回的申请可重新编辑'); return; }
+      applyForm(a.type, a);
+    };
+  });
+  document.querySelectorAll('[data-archive-del]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.archiveDel);
+      if (!a) return;
+      if (!confirm(`确定删除公假证明存档「${a.proofNo || a.name}」？删除后不可恢复。`)) return;
+      db.applies = db.applies.filter((x) => x.id !== a.id);
+      commit('删除公假证明存档', `${a.proofNo || '—'} · ${a.name}`); save(); render(); toast('存档记录已删除');
     };
   });
   document.querySelectorAll('[data-apply-pass]').forEach((b) => {
