@@ -405,7 +405,8 @@ function renderDept() {
             <td><div class="row-actions">
               ${cur.role === 'admin' && r.status === '待管理员审核' ? `
                 <button class="link-btn" data-dept-pass="${r.id}">通过</button>
-                <button class="link-btn del" data-dept-reject="${r.id}">驳回</button>` : '<span class="cell-sub">—</span>'}
+                <button class="link-btn del" data-dept-reject="${r.id}">驳回</button>` : ''}
+              ${cur.role === 'presidium' ? `<button class="link-btn del" data-dept-req-del="${r.id}">删除</button>` : ''}
             </div></td></tr>`).join('')}</tbody>
       </table></div>
     </div>` : ''}`;
@@ -509,6 +510,15 @@ function renderDept() {
       const r = db.deptRequests.find((x) => x.id === b.dataset.deptReject);
       r.status = '已驳回';
       commit('驳回部门申请', r.dept); save(); render(); toast('已驳回申请');
+    };
+  });
+  document.querySelectorAll('[data-dept-req-del]').forEach((b) => {
+    b.onclick = () => {
+      const r = db.deptRequests.find((x) => x.id === b.dataset.deptReqDel);
+      if (!r) return;
+      if (!confirm(`确定删除部门申请「${r.type} · ${r.dept}」？删除后记录不可恢复。`)) return;
+      db.deptRequests = db.deptRequests.filter((x) => x.id !== r.id);
+      commit('删除部门申请', `${r.type} · ${r.dept}`); save(); render(); toast('部门申请已删除');
     };
   });
 }
