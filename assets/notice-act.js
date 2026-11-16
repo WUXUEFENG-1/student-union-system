@@ -321,6 +321,7 @@ renderActivity = function () {
 
 actForm = function (id) {
   const a = id ? db.activities.find((x) => x.id === id) : {};
+  const aPrefill = id ? Object.assign({}, a, { start: (a.start || '').replace(' ', 'T'), end: (a.end || '').replace(' ', 'T') }) : {};
   const others = db.departments.filter((d) => d.name !== cur.dept && d.status === '正常').map((d) => d.name);
   const c1 = a.collaborators && a.collaborators[0] ? a.collaborators[0] : { dept: '无', count: 0 };
   const c2 = a.collaborators && a.collaborators[1] ? a.collaborators[1] : { dept: '无', count: 0 };
@@ -335,18 +336,18 @@ actForm = function (id) {
       { key: 'cdept2', label: '协同部门二', type: 'select', options: ['无'].concat(others) },
       { key: 'cnum2', label: '协同部门二参与人数', type: 'number' },
       { key: 'total', label: '总参与人数', type: 'number', required: true },
-      { key: 'start', label: '开始时间', placeholder: '2026-11-20 09:00', required: true },
-      { key: 'end', label: '结束时间', placeholder: '2026-11-20 17:00', required: true },
+      { key: 'start', label: '开始时间', type: 'datetime-local', required: true },
+      { key: 'end', label: '结束时间', type: 'datetime-local', required: true },
       { key: 'place', label: '活动地点', required: true },
       { key: 'content', label: '活动内容', type: 'textarea', required: true }
     ],
     values: Object.assign({ cdept1: others[0] || '无', cnum1: 5, cdept2: '无', cnum2: 0, total: 20, start: '2026-11-20 09:00', end: '2026-11-20 17:00', place: '学院广场', content: '' },
-      a.id ? { cdept1: c1.dept, cnum1: c1.count, cdept2: c2.dept, cnum2: c2.count } : {}, a),
+      a.id ? { cdept1: c1.dept, cnum1: c1.count, cdept2: c2.dept, cnum2: c2.count } : {}, aPrefill),
     onSubmit(d) {
       const collaborators = [];
       if (d.cdept1 !== '无') collaborators.push({ dept: d.cdept1, count: d.cnum1 });
       if (d.cdept2 !== '无') collaborators.push({ dept: d.cdept2, count: d.cnum2 });
-      const base = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: d.start, end: d.end, place: d.place, content: d.content, status: '待主席审核', approver: '', reason: '', stage: 0, flow: ACT_FLOW.slice() };
+      const base = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: d.start.replace('T', ' '), end: d.end.replace('T', ' '), place: d.place, content: d.content, status: '待主席审核', approver: '', reason: '', stage: 0, flow: ACT_FLOW.slice() };
       if (id) {
         Object.assign(a, base);
         actTrack(a).push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '修改并重新提交', note: '', time: today() });
