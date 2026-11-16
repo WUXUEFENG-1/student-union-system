@@ -143,7 +143,7 @@ const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes
 
 function tone(status) {
   if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
-  if (['待审核', '待审批', '待管理员审核', '待主席团审核', '待教师审核', '待主席审核', '待副主席审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
+  if (['待审核', '待审批', '待责任教师审核', '待主席团审核', '待教师审核', '待主席审核', '待副主席审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
   if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销', '已作废'].includes(status)) return 'red';
   return 'gray';
 }
@@ -423,15 +423,15 @@ function pendingTasks() {
     const acts = db.activities.filter((a) => a.status === '待审批').length;
     if (acts) t.push(['活动待审批', acts, 'activity']);
   }
-  if (cur.role === 'admin') {
-    const dr = db.deptRequests.filter((r) => r.status === '待管理员审核').length;
+  if (cur.role === 'teacher') {
+    const dr = db.deptRequests.filter((r) => r.status === '待责任教师审核').length;
     if (dr) t.push(['部门申请待审核', dr, 'dept']);
   }
   if (cur.role === 'presidium' || cur.role === 'admin') {
     const k = db.assessments.filter((a) => a.targetRole === 'member' && a.status === '待审核').length;
     if (k) t.push(['成员考核待复核', k, 'assess']);
   }
-  const leaveReviewer = { admin: '管理员', presidium: '主席团', minister: '部长/副部长' }[cur.role];
+  const leaveReviewer = { teacher: '责任教师', presidium: '主席团', minister: '部长/副部长' }[cur.role];
   if (leaveReviewer) {
     const l = db.leaves.filter((x) => x.status === '待审核' && x.reviewer === leaveReviewer).length;
     if (l) t.push(['请假待审核', l, 'leave']);
