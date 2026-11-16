@@ -798,7 +798,7 @@ plProofHtml = function (a) {
   const v = a.values || {};
   const map = {
     '{姓名}': a.name, '{学号}': a.sno || '—', '{专业}': a.major || '—', '{班级}': a.class || '—',
-    '{所属部门}': a.dept || '—', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
+    '{所属部门}': a.dept || '—', '{职务}': a.title || '成员', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
     '{活动地点}': v.place || '—', '{请假课程及日期}': v.courses || '—', '{申请说明}': v.explanation || '',
     '{联系电话}': v.phone || '—', '{申请份数与用途}': v.copiesPurpose || '—',
     '{证明编号}': a.proofNo || '—', '{出具日期}': cnDate(a.approvedAt)
