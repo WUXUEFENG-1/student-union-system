@@ -525,20 +525,20 @@ function renderDept() {
 
 /* ---------------- 考核 ---------------- */
 function renderAssess() {
-  const targetRole = { admin: 'presidium', presidium: 'minister', minister: 'member' }[cur.role];
+  const targetRole = { teacher: 'presidium', presidium: 'minister', minister: 'member' }[cur.role];
   const targets = db.members.filter((m) => {
     if (m.status !== '在任') return false;
     if (targetRole === 'presidium') return ['主席', '副主席'].includes(m.title);
     if (targetRole === 'minister') return ['部长', '副部长'].includes(m.title);
     return m.dept === cur.dept;
   });
-  const rows = db.assessments.filter((a) => a.targetRole === targetRole || (cur.role === 'presidium' && a.targetRole === 'member'));
-  const label = cur.role === 'admin' ? '主席团考核' : cur.role === 'presidium' ? '部长团考核' : '部内成员考核';
+  const rows = db.assessments.filter((a) => targetRole ? (a.targetRole === targetRole || (cur.role === 'presidium' && a.targetRole === 'member')) : true);
+  const label = cur.role === 'teacher' ? '主席团考核' : cur.role === 'presidium' ? '部长团考核' : cur.role === 'minister' ? '部内成员考核' : '考核档案';
 
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>${label}</h2><div class="sub">管理员考核主席团，主席团考核部长/副部长，部长/副部长考核部内成员（提交主席团复核）</div></div>
+        <div><h2>${label}</h2><div class="sub">责任教师考核主席团，主席团考核部长/副部长，部长/副部长考核部内成员（提交主席团复核）；考核人可删除本人提交的考核记录</div></div>
         <div class="toolbar">
           ${targets.length ? `<select class="filter" id="assessTarget">${targets.map((m) => `<option value="${m.name}">${esc(m.name)}（${esc(m.dept)}·${esc(m.title)}）</option>`).join('')}</select>
           <button class="primary-btn" id="addAssess">+ 新建考核</button>` : ''}
@@ -551,7 +551,7 @@ function renderAssess() {
             <td><span class="score">${k.score}</span></td><td>${gradeBadge(k.score)}</td><td>${esc(k.comment)}</td><td>${badge(k.status)}</td><td>${esc(k.submitter)}</td>
             <td><div class="row-actions">
               ${cur.role === 'presidium' && k.targetRole === 'member' && k.status === '待审核' ? `<button class="link-btn" data-assess-pass="${k.id}">审核通过</button>` : ''}
-              ${k.status === '待审核' && k.submitter === cur.name ? `<button class="link-btn del" data-assess-del="${k.id}">撤回</button>` : ''}
+              ${k.submitter === cur.name ? `<button class="link-btn del" data-assess-del="${k.id}">删除</button>` : ''}
             </div></td></tr>`).join('') : '<tr><td colspan="9" class="empty">暂无考核记录</td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -589,8 +589,12 @@ function renderAssess() {
   });
   document.querySelectorAll('[data-assess-del]').forEach((b) => {
     b.onclick = () => {
-      db.assessments = db.assessments.filter((x) => x.id !== b.dataset.assessDel);
-      commit('撤回考核', b.dataset.assessDel); save(); render(); toast('考核记录已撤回');
+      const k = db.assessments.find((x) => x.id === b.dataset.assessDel);
+      if (!k) return;
+      if (k.submitter !== cur.name) { toast('仅可删除本人提交的考核记录'); return; }
+      if (!confirm(`确定删除对「${k.target}」的考核记录？删除后不可恢复。`)) return;
+      db.assessments = db.assessments.filter((x) => x.id !== k.id);
+      commit('删除考核记录', `${k.target} ${k.period} ${k.score} 分`); save(); render(); toast('考核记录已删除');
     };
   });
 }
