@@ -208,6 +208,18 @@ tr:hover td { background: #fafcff; }
 .notice-item p { font-size: 12.5px; color: var(--muted); margin-top: 5px; line-height: 1.65; }
 .notice-meta { font-size: 11.5px; color: #9aa9b8; margin-top: 6px; }
 .notice-item.muted { opacity: .6; }
+
+/* 通知正文排版：段落 / 编号分段、首行缩进 2 字、行距 2 倍 */
+.notice-block-title { font-size: 12.5px; color: #7b8b9a; margin: 4px 0 2px; font-weight: 600; }
+.notice-body { margin: 8px 0 4px; padding: 10px 14px; background: #fbfcfe; border: 1px solid var(--line); border-radius: 8px; }
+.notice-body p { margin: 0; font-size: 13px; color: #3d4b5a; line-height: 2; text-indent: 2em; text-align: justify; letter-spacing: .2px; }
+.notice-body p.nt-to { text-indent: 0; font-weight: 600; color: #22303d; }
+.notice-body p.nt-h1 { font-weight: 700; color: #22303d; }
+.notice-body p.nt-h2 { font-weight: 600; color: #22303d; }
+.notice-body p.nt-num { text-indent: 2em; }
+.notice-sign { display: flex; flex-wrap: wrap; gap: 2px 16px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: #5b6b7b; line-height: 1.9; }
+.notice-sign span { white-space: nowrap; }
+.notice-item.notice-pend { background: #fffaf1; border-radius: 8px; padding-left: 10px; padding-right: 10px; }
 .todo-item { cursor: pointer; border-radius: 8px; padding-left: 8px; padding-right: 8px; }
 .todo-item:hover { background: var(--blue-50); }
 .todo-item p { color: var(--blue-600); }
