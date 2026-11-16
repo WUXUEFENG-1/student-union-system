@@ -397,13 +397,13 @@ function renderDept() {
     </div>
     ${allPower() || cur.role === 'presidium' ? `
     <div class="card">
-      <div class="card-head"><div><h2>部门申请表</h2><div class="sub">主席团提交申请，由管理员终审</div></div></div>
+      <div class="card-head"><div><h2>部门申请表</h2><div class="sub">主席团提交申请，由责任教师终审</div></div></div>
       <div class="table-wrap"><table>
         <thead><tr><th>类型</th><th>部门</th><th>申请说明</th><th>提交人</th><th>日期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${db.deptRequests.slice().reverse().map((r) => `
           <tr><td>${esc(r.type)}</td><td>${esc(r.dept)}</td><td>${esc(r.reason)}</td><td>${esc(r.submitter)}</td><td>${esc(r.date)}</td><td>${badge(r.status)}</td>
             <td><div class="row-actions">
-              ${cur.role === 'admin' && r.status === '待管理员审核' ? `
+              ${cur.role === 'teacher' && r.status === '待责任教师审核' ? `
                 <button class="link-btn" data-dept-pass="${r.id}">通过</button>
                 <button class="link-btn del" data-dept-reject="${r.id}">驳回</button>` : ''}
               ${cur.role === 'presidium' ? `<button class="link-btn del" data-dept-req-del="${r.id}">删除</button>` : ''}
@@ -417,14 +417,14 @@ function renderDept() {
     if (cur.role === 'presidium') {
       openForm({
         title: '提交新增部门申请',
-        hint: '主席团提交后由管理员审核，通过后部门生效。',
+        hint: '主席团提交后由责任教师审核，通过后部门生效。',
         fields: [
           { key: 'name', label: '部门名称', required: true },
           { key: 'leader', label: '负责人', required: true },
           { key: 'reason', label: '申请说明', type: 'textarea', required: true }
         ],
         onSubmit(d) {
-          db.deptRequests.push({ id: uid('dr'), type: '新增', dept: d.name, reason: d.reason, submitter: cur.name, date: today(), status: '待管理员审核' });
+          db.deptRequests.push({ id: uid('dr'), type: '新增', dept: d.name, reason: d.reason, submitter: cur.name, date: today(), status: '待责任教师审核' });
           commit('提交部门申请', `新增 ${d.name}`); render(); toast('新增部门申请已提交');
         }
       });
@@ -467,11 +467,11 @@ function renderDept() {
       const d = db.departments.find((x) => x.id === b.dataset.dissolve);
       openForm({
         title: '申请罢免部门 · ' + d.name,
-        hint: '主席团提交罢免请求，由管理员审核。',
+        hint: '主席团提交罢免请求，由责任教师审核。',
         fields: [{ key: 'reason', label: '申请说明', type: 'textarea', required: true }],
         onSubmit(v) {
-          db.deptRequests.push({ id: uid('dr'), type: '罢免', dept: d.name, reason: v.reason, submitter: cur.name, date: today(), status: '待管理员审核' });
-          commit('提交部门罢免', d.name); render(); toast('罢免申请已提交管理员审核');
+          db.deptRequests.push({ id: uid('dr'), type: '罢免', dept: d.name, reason: v.reason, submitter: cur.name, date: today(), status: '待责任教师审核' });
+          commit('提交部门罢免', d.name); render(); toast('罢免申请已提交责任教师审核');
         }
       });
     };
@@ -658,18 +658,17 @@ function renderNotice() {
 }
 
 /* ---------------- 请假 ---------------- */
-const LEAVE_REVIEWER = { presidium: '管理员', minister: '主席团', student: '部长/副部长' };
+const LEAVE_REVIEWER = { presidium: '责任教师', minister: '主席团', student: '部长/副部长' };
 function canSubmitLeave() { return ['presidium', 'minister', 'student'].includes(cur.role); }
 function canReviewLeave(l) {
-  if (allPower()) return l.status === '待审核';
-  const map = { presidium: '主席团', minister: '部长/副部长' };
-  return map[cur.role] === l.reviewer && l.status === '待审核';
+  if (l.status !== '待审核') return false;
+  const map = { teacher: '责任教师', presidium: '主席团', minister: '部长/副部长' };
+  return map[cur.role] === l.reviewer;
 }
 
 function renderLeave() {
   const mine = db.leaves.filter((l) => l.applicant === cur.name);
-  const visible = cur.role === 'admin' ? db.leaves
-    : cur.role === 'presidium' ? db.leaves
+  const visible = ['admin', 'presidium', 'teacher'].includes(cur.role) ? db.leaves
     : cur.role === 'minister' ? db.leaves.filter((l) => l.reviewer === '部长/副部长' || l.applicant === cur.name)
     : mine;
 
