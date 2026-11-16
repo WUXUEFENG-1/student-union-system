@@ -299,7 +299,9 @@ function renderJoin() {
           <tr><td><strong>${esc(j.name)}</strong></td><td>${esc(j.sno)}</td>
             <td><span class="badge blue">${esc(j.dept)}</span></td><td>${esc(j.reason)}</td><td>${esc(j.date)}</td><td>${badge(j.status)}</td>
             <td><div class="row-actions">${(cur.role === 'minister' || allPower()) && j.status === '待审核'
-              ? `<button class="link-btn" data-join-pass="${j.id}">通过</button><button class="link-btn del" data-join-reject="${j.id}">驳回</button>` : '<span class="cell-sub">—</span>'}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">暂无入会申请记录</td></tr>'}</tbody>
+              ? `<button class="link-btn" data-join-pass="${j.id}">通过</button><button class="link-btn del" data-join-reject="${j.id}">驳回</button>` : ''}
+              ${cur.role === 'admin' ? `<button class="link-btn del" data-join-del="${j.id}">删除</button>` : ''}
+              ${!((cur.role === 'minister' || allPower()) && j.status === '待审核') && cur.role !== 'admin' ? '<span class="cell-sub">—</span>' : ''}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">暂无入会申请记录</td></tr>'}</tbody>
       </table></div>
     </div>`;
 
@@ -480,6 +482,15 @@ function renderJoin() {
       const j = db.joinRequests.find((x) => x.id === b.dataset.joinReject);
       j.status = '已驳回';
       commit('驳回入会申请', j.name); save(); render(); toast('已驳回申请');
+    };
+  });
+  document.querySelectorAll('[data-join-del]').forEach((b) => {
+    b.onclick = () => {
+      const j = db.joinRequests.find((x) => x.id === b.dataset.joinDel);
+      if (!j) return;
+      if (!confirm(`确定删除入会申请记录「${j.name} → ${j.dept}」？删除后不可恢复。`)) return;
+      db.joinRequests = db.joinRequests.filter((x) => x.id !== j.id);
+      commit('删除入会申请记录', `${j.name} → ${j.dept}`); save(); render(); toast('入会申请记录已删除');
     };
   });
 }
