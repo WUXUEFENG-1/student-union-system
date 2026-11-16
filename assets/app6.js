@@ -433,11 +433,11 @@ openApplyInfo = function (a) {
   rows += `<div><span>工作交接情况</span><strong>${esc(v.handover || '—')}</strong></div>`;
   if (v.applicantSign) rows += `<div><span>申请人签字</span><img src="${v.applicantSign}" style="height:48px;border:1px solid #d9e2ec;border-radius:6px;background:#fff"></div>`;
   const trackHtml = (a.track || []).map((t) =>
-    `<div class="perm-item"><span class="dot"></span>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div>`).join('')
+    `<div class="perm-item"><span class="dot"></span><div>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div></div>`).join('')
     || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>';
   const extra = `<div class="row-actions" style="margin-top:12px"><button class="primary-btn light" id="elExportBtn">导出申请表（Word / PDF）</button></div>`;
   openInfo(a.typeName + ' · ' + a.name,
-    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批轨迹</div><div class="perm-list">${trackHtml}</div>`,
+    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${trackHtml}</div>`,
     '提交时间：' + a.date);
   const btn = document.getElementById('elExportBtn');
   if (btn) btn.onclick = () => electionExportPicker(a);
