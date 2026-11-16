@@ -146,7 +146,7 @@ function applyApproved(a) {
 /* ---------------- 活动公假证明：模板回填与导出 ---------------- */
 const DEFAULT_PL_TEMPLATE = {
   title: '应用经济系学生会证明',
-  body: '兹有{专业}{班级}学生{姓名}，学号：{学号}，是我系学生会{所属部门}成员，于{活动起止时间}在{活动地点}参加「{活动名称}」活动。\n因参加本次活动，需请假课程为：{请假课程及日期}。\n活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。{申请说明}\n特此证明。'
+  body: '兹有{专业}专业{班级}班学生{姓名}，学号：{学号}，是我系学生会{所属部门}{职务}，于{活动起止时间}在{活动地点}参加「{活动名称}」活动。\n因参加本次活动，需请假课程为：{请假课程及日期}。\n活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。{申请说明}\n特此证明。'
 };
 function plTemplate() { return (db.templates && db.templates.publicLeave) || DEFAULT_PL_TEMPLATE; }
 function cnDate(s) {
@@ -158,7 +158,7 @@ function plProofHtml(a) {
   const v = a.values || {};
   const map = {
     '{姓名}': a.name, '{学号}': a.sno || '—', '{专业}': a.major || '—', '{班级}': a.class || '—',
-    '{所属部门}': a.dept || '—', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
+    '{所属部门}': a.dept || '—', '{职务}': a.title || '成员', '{活动名称}': v.activityName || '—', '{活动起止时间}': v.period || '—',
     '{活动地点}': v.place || '—', '{请假课程及日期}': v.courses || '—', '{申请说明}': v.explanation || '',
     '{联系电话}': v.phone || '—', '{申请份数与用途}': v.copiesPurpose || '—',
     '{证明编号}': a.proofNo || '—', '{出具日期}': cnDate(a.approvedAt)
