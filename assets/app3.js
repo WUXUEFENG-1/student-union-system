@@ -122,6 +122,9 @@ function renderCollect() {
 function eventCard(e) {
   const signed = e.signups.some((s) => s.name === cur.name);
   const full = e.signups.length >= e.quota;
+  const collab = e.collaborators && e.collaborators.length ? e.collaborators.map((c) => `${c.dept} ${c.count}人`).join('、') : '无';
+  const when = e.time || `${e.start || ''}${e.end ? ' — ' + e.end : ''}`;
+  const desc = e.desc || e.content || '';
   const ops = [];
   if (e.status === '报名中') {
     if (signed) ops.push(`<button class="link-btn del" data-event-cancel="${e.id}">取消报名</button>`);
@@ -135,11 +138,12 @@ function eventCard(e) {
   if (cur.role === 'presidium') ops.push(`<button class="link-btn del" data-event-del="${e.id}">删除</button>`);
   return `<div class="card collect-card">
     <div class="card-head">
-      <div><h2>${esc(e.title)} ${badge(e.status)}</h2><div class="sub">${esc(e.desc || '')}</div></div>
+      <div><h2>${esc(e.title)} ${badge(e.status)}</h2><div class="sub">${esc(desc)}</div></div>
       <div class="row-actions">${ops.join('')}</div>
     </div>
     <div class="collect-meta">
-      <span>时间：${esc(e.time)}</span><span>地点：${esc(e.place)}</span>
+      <span>时间：${esc(when)}</span><span>地点：${esc(e.place)}</span>
+      <span>协同：${esc(collab)}</span>
       <span>名额：${e.signups.length}/${e.quota}</span>
       <span>发布：${esc(e.publisher)}（${esc(ROLE_NAMES[e.publisherRole] || e.publisherRole)}）</span>
       ${signed ? '<span class="badge green">我已报名</span>' : ''}
@@ -157,19 +161,28 @@ function renderEvent() {
     ${list.length ? list.map(eventCard).join('') : '<div class="card"><div class="empty">暂无活动</div></div>'}`;
 
   if ($('#addEvent')) $('#addEvent').onclick = () => {
+    const others = db.departments.filter((d) => d.name !== cur.dept && d.status === '正常').map((d) => d.name);
     openForm({
       title: '发布活动报名',
       okText: '发布',
       fields: [
         { key: 'title', label: '活动名称', required: true },
-        { key: 'desc', label: '活动说明', type: 'textarea' },
-        { key: 'time', label: '活动时间', placeholder: '2026-11-20 09:00', required: true },
+        { key: 'cdept1', label: '协同部门一', type: 'select', options: ['无'].concat(others) },
+        { key: 'cnum1', label: '协同部门一参与人数', type: 'number' },
+        { key: 'cdept2', label: '协同部门二', type: 'select', options: ['无'].concat(others) },
+        { key: 'cnum2', label: '协同部门二参与人数', type: 'number' },
+        { key: 'total', label: '总参与人数', type: 'number', required: true },
+        { key: 'start', label: '开始时间', placeholder: '2026-11-20 09:00', required: true },
+        { key: 'end', label: '结束时间', placeholder: '2026-11-20 17:00', required: true },
         { key: 'place', label: '活动地点', required: true },
-        { key: 'quota', label: '报名名额', type: 'number', required: true }
+        { key: 'content', label: '活动内容', type: 'textarea', required: true }
       ],
-      values: { quota: 30, time: '2026-11-20 09:00', place: '学院广场' },
+      values: { cdept1: others[0] || '无', cnum1: 5, cdept2: '无', cnum2: 0, total: 30, start: '2026-11-20 09:00', end: '2026-11-20 17:00', place: '学院广场' },
       onSubmit(d) {
-        db.events.unshift({ id: uid('e'), title: d.title, desc: d.desc, time: d.time, place: d.place, quota: d.quota, publisher: cur.name, publisherRole: cur.role, date: today(), status: '报名中', signups: [] });
+        const collaborators = [];
+        if (d.cdept1 !== '无') collaborators.push({ dept: d.cdept1, count: d.cnum1 });
+        if (d.cdept2 !== '无') collaborators.push({ dept: d.cdept2, count: d.cnum2 });
+        db.events.unshift({ id: uid('e'), title: d.title, desc: d.content, content: d.content, collaborators, total: d.total, quota: d.total, start: d.start, end: d.end, time: `${d.start} — ${d.end}`, place: d.place, publisher: cur.name, publisherRole: cur.role, date: today(), status: '报名中', signups: [] });
         commit('发布活动报名', d.title); render(); toast('活动已发布，成员可开始报名');
       }
     });
