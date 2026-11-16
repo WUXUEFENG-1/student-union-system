@@ -132,6 +132,7 @@ function eventCard(e) {
     ops.push(`<button class="link-btn" data-event-export="${e.id}">导出名单</button>`);
     if (e.status === '报名中') ops.push(`<button class="link-btn del" data-event-close="${e.id}">截止报名</button>`);
   }
+  if (cur.role === 'presidium') ops.push(`<button class="link-btn del" data-event-del="${e.id}">删除</button>`);
   return `<div class="card collect-card">
     <div class="card-head">
       <div><h2>${esc(e.title)} ${badge(e.status)}</h2><div class="sub">${esc(e.desc || '')}</div></div>
@@ -220,6 +221,15 @@ function renderEvent() {
       const e = db.events.find((x) => x.id === b.dataset.eventClose);
       e.status = '已截止';
       commit('截止活动报名', e.title); save(); render(); toast('报名已截止');
+    };
+  });
+  document.querySelectorAll('[data-event-del]').forEach((b) => {
+    b.onclick = () => {
+      const e = db.events.find((x) => x.id === b.dataset.eventDel);
+      if (!e) return;
+      if (!confirm(`确定删除活动「${e.title}」？删除后报名记录一并清除，不可恢复。`)) return;
+      db.events = db.events.filter((x) => x.id !== e.id);
+      commit('删除活动报名', e.title); save(); render(); toast('活动报名已删除');
     };
   });
 }
