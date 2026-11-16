@@ -551,7 +551,7 @@ function renderAssess() {
             <td><span class="score">${k.score}</span></td><td>${gradeBadge(k.score)}</td><td>${esc(k.comment)}</td><td>${badge(k.status)}</td><td>${esc(k.submitter)}</td>
             <td><div class="row-actions">
               ${cur.role === 'presidium' && k.targetRole === 'member' && k.status === '待审核' ? `<button class="link-btn" data-assess-pass="${k.id}">审核通过</button>` : ''}
-              ${k.submitter === cur.name ? `<button class="link-btn del" data-assess-del="${k.id}">删除</button>` : ''}
+              ${(k.submitter === cur.name || cur.role === 'admin') ? `<button class="link-btn del" data-assess-del="${k.id}">删除</button>` : ''}
             </div></td></tr>`).join('') : '<tr><td colspan="9" class="empty">暂无考核记录</td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -591,7 +591,7 @@ function renderAssess() {
     b.onclick = () => {
       const k = db.assessments.find((x) => x.id === b.dataset.assessDel);
       if (!k) return;
-      if (k.submitter !== cur.name) { toast('仅可删除本人提交的考核记录'); return; }
+      if (k.submitter !== cur.name && cur.role !== 'admin') { toast('仅可删除本人提交的考核记录'); return; }
       if (!confirm(`确定删除对「${k.target}」的考核记录？删除后不可恢复。`)) return;
       db.assessments = db.assessments.filter((x) => x.id !== k.id);
       commit('删除考核记录', `${k.target} ${k.period} ${k.score} 分`); save(); render(); toast('考核记录已删除');
