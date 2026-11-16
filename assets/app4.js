@@ -125,6 +125,40 @@ function applyTypesVisible() {
 function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
+
+/* 审批流转可视化：申请人提交 → 各审批节点（绿=已完成 / 蓝=当前节点 / 灰=待处理 / 红=终止） */
+function flowTimelineHtml(a) {
+  const cfg = APPLY_TYPES[a.type];
+  const nodes = (Array.isArray(a.flow) && a.flow.length) ? a.flow : (cfg && cfg.stages) || [];
+  const doneAll = ['已通过', '已答复'].includes(a.status);
+  const stopped = ['已驳回', '已撤回', '已作废'].includes(a.status);
+  const stage = a.stage || 0;
+  const track = a.track || [];
+  const actorOf = (label) => {
+    const t = track.find((x) => x.action === label + '通过' || x.action === label);
+    return t ? t.actor : '—';
+  };
+  const stateText = { done: '已完成', current: '当前节点', pending: '待处理', rejected: a.status === '已撤回' ? '已撤回' : (a.status === '已作废' ? '已作废' : '已驳回') };
+  const items = [{ title: '申请人提交', state: 'done', actor: a.name || '—' }];
+  nodes.forEach((label, i) => {
+    let state;
+    if (doneAll) state = 'done';
+    else if (stopped) state = i < stage ? 'done' : (i === stage ? 'rejected' : 'pending');
+    else if (i < stage) state = 'done';
+    else if (i === stage) state = 'current';
+    else state = 'pending';
+    items.push({ title: label, state, actor: actorOf(label) });
+  });
+  return `<div class="flow-timeline">` + items.map((it) => `
+    <div class="ft-node ft-${it.state}">
+      <span class="ft-dot"></span>
+      <div class="ft-body">
+        <div class="ft-title">${esc(it.title)}</div>
+        <div class="ft-status">${stateText[it.state]}</div>
+        <div class="ft-actor">${esc(it.actor)}</div>
+      </div>
+    </div>`).join('') + `</div>`;
+}
 function applyApproved(a) {
   const mem = db.members.find((m) => m.name === a.name) || db.members.find((m) => m.sno === a.sno);
   const acc = db.accounts.find((x) => x.name === a.name);
@@ -382,7 +416,7 @@ function renderJoin() {
       } else {
         rowsHtml = Object.entries(v).map(([k, val]) => `<div><span>${esc(k)}</span><strong>${esc(val || '—')}</strong></div>`).join('');
       }
-      const track = (a.track || []).map((t) => `<div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div>`).join('');
+      const track = (a.track || []).map((t) => `<div class="perm-item"><span class="dot"></span><div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div></div>`).join('');
       const isOwner = a.name === cur.name;
       const approved = a.status === '已通过' && !!a.proofNo;
       const canArchive = allPower() || ['presidium', 'minister', 'teacher'].includes(cur.role);
@@ -392,7 +426,7 @@ function renderJoin() {
         if (approved && canArchive) actionHtml += `<button class="primary-btn light" id="plArchive">导出证明存档</button>`;
         if (approved && (isOwner || cur.role === 'admin')) actionHtml += `<button class="link-btn del" id="plVoid">作废申请</button>`;
       }
-      openInfo(a.typeName + ' · ' + a.name, `<div class="info-list">${rowsHtml}</div>${a.certNo ? `<p class="form-hint">证明编号：${esc(a.certNo)}</p>` : ''}${a.proofNo ? `<p class="form-hint">证明编号：${esc(a.proofNo)}（审批通过后表单内容锁定，不可再编辑）</p>` : ''}${actionHtml ? `<div class="row-actions" style="margin-top:12px">${actionHtml}</div>` : ''}<div class="form-hint" style="margin-top:10px">审批轨迹</div><div class="perm-list">${track || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>'}</div>`, '提交时间：' + a.date);
+      openInfo(a.typeName + ' · ' + a.name, `<div class="info-list">${rowsHtml}</div>${a.certNo ? `<p class="form-hint">证明编号：${esc(a.certNo)}</p>` : ''}${a.proofNo ? `<p class="form-hint">证明编号：${esc(a.proofNo)}（审批通过后表单内容锁定，不可再编辑）</p>` : ''}${actionHtml ? `<div class="row-actions" style="margin-top:12px">${actionHtml}</div>` : ''}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${track || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>'}</div>`, '提交时间：' + a.date);
       const dl = $('#plDownload'), ar = $('#plArchive'), vd = $('#plVoid');
       if (dl) dl.onclick = () => plFormatPicker(a, false);
       if (ar) ar.onclick = () => plFormatPicker(a, true);
