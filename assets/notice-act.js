@@ -269,11 +269,14 @@ renderActivity = function () {
       if (ACT_PENDING.includes(a.status) || a.status === '已驳回') ops.push('<button class="link-btn" data-act-edit="' + a.id + '">修改</button>');
       if (ACT_PENDING.includes(a.status) || a.status === '已通过') ops.push('<button class="link-btn del" data-act-revoke="' + a.id + '">撤销</button>');
     }
+    if (cur.role === 'presidium') ops.push('<button class="link-btn del" data-act-del="' + a.id + '">删除</button>');
+    const deptLeader = (db.departments.find((d) => d.name === a.dept) || {}).leader || '';
+    const applicantName = a.applicant || deptLeader;
     const st = a.status === '待主席团审核' || a.status === '待教师审核' ? '待主席审核' : a.status;
     return `<tr>
       <td><strong>${esc(a.title)}</strong><div class="cell-sub">${esc(String(a.content || '').slice(0, 42))}</div></td>
       <td><span class="badge blue">${esc(a.dept)}</span></td>
-      <td>${a.applicant ? esc(a.applicant) + `<div class="cell-sub">${esc(a.applicantTitle || '')}</div>` : '<span class="cell-sub">—</span>'}</td>
+      <td>${applicantName ? esc(applicantName) + `<div class="cell-sub">${esc(a.applicantTitle || '')}</div>` : '<span class="cell-sub">—</span>'}</td>
       <td>${esc(collab)}</td><td>${a.total}</td>
       <td class="nowrap">${esc(a.start)}<br>— ${esc(a.end)}</td><td>${esc(a.place)}</td>
       <td>${badge(st)}${a.reason ? `<div class="cell-sub">${esc(a.reason)}</div>` : ''}</td>
@@ -314,6 +317,15 @@ renderActivity = function () {
       a.status = '已撤回'; a.reason = '承办部门撤销申请';
       actTrack(a).push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '撤销申请', note: '', time: today() });
       commit('撤销活动', a.title); save(); render(); toast('活动已撤销');
+    };
+  });
+  document.querySelectorAll('[data-act-del]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.activities.find((x) => x.id === b.dataset.actDel);
+      if (!a) return;
+      if (!confirm(`确定删除活动「${a.title}」？删除后记录不可恢复。`)) return;
+      db.activities = db.activities.filter((x) => x.id !== a.id);
+      commit('删除活动申请', a.title); save(); render(); toast('活动申请已删除');
     };
   });
   document.querySelectorAll('[data-act-edit]').forEach((b) => { b.onclick = () => actForm(b.dataset.actEdit); });
