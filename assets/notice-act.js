@@ -53,9 +53,9 @@ function ntCanApprove(n) {
 }
 function ntSignHtml(n) {
   const c1 = n.check1, c2 = n.check2, c3 = n.check3;
-  const t1 = c1 ? `${esc(c1.name)}（${esc(c1.dept || '')}部长）` : '—';
-  const t2 = c2 ? `${esc(c2.name)}（副主席）` : '—';
-  const t3 = c3 ? `${esc(c3.name)}（主席）` : (n.publisher === '主席团' ? `${esc(n.publisherName)}（主席）` : '—');
+  const t1 = c1 ? `${esc(c1.name)}` : '—';
+  const t2 = c2 ? `${esc(c2.name)}` : '—';
+  const t3 = c3 ? `${esc(c3.name)}` : (n.publisher === '主席团' ? `${esc(n.publisherName)}` : '—');
   return `<div class="notice-sign">
     <span>撰稿人：${esc(ntWriter(n))}</span>
     <span>一审一校：${t1}</span>
@@ -91,7 +91,7 @@ renderNotice = function () {
       ${n.reason ? `<div class="cell-sub" style="color:#c0392b">驳回原因：${esc(n.reason)}</div>` : ''}
       ${ntSignHtml(n)}
       <div class="notice-meta" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <span>${esc(n.date || '')} · 发布：${esc(n.publisherName || '')}（${esc(n.publisher || '')}）${n.scope && n.scope !== '全员' ? ` · 范围：${esc(n.scope)}` : ''}</span>
+        <span>${esc(n.date || '')} · 发布：${esc(n.publisherName || '')}${n.scope && n.scope !== '全员' ? ` · 范围：${esc(n.scope)}` : ''}</span>
         <span class="row-actions">${ops.join('')}</span>
       </div>
     </div>`;
@@ -211,7 +211,7 @@ renderNotice = function () {
           return;
         } catch (e) { /* 解码失败则回退为文本导出 */ }
       }
-      const text = `通知标题：${n.title}\n撰稿人：${ntWriter(n)}\n一审一校：${n.check1 ? n.check1.name : '—'}\n二审二校：${n.check2 ? n.check2.name : '—'}\n三审三校：${n.check3 ? n.check3.name : '—'}\n发布人：${n.publisherName}（${n.publisher}）\n发布时间：${n.date}\n生效范围：${n.scope || '全员'}\n附件：${n.attach}\n\n${n.content}`;
+      const text = `通知标题：${n.title}\n撰稿人：${ntWriter(n)}\n一审一校：${n.check1 ? n.check1.name : '—'}\n二审二校：${n.check2 ? n.check2.name : '—'}\n三审三校：${n.check3 ? n.check3.name : '—'}\n发布人：${n.publisherName}\n发布时间：${n.date}\n生效范围：${n.scope || '全员'}\n附件：${n.attach}\n\n${n.content}`;
       downloadBlob(new Blob(['\ufeff' + text], { type: 'text/plain;charset=utf-8' }), (n.attach || n.title).replace(/\.[^.]+$/, '') + '.txt');
       commit('下载通知附件', n.title);
     };
