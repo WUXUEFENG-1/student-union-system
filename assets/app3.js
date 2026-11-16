@@ -172,17 +172,18 @@ function renderEvent() {
         { key: 'cdept2', label: '协同部门二', type: 'select', options: ['无'].concat(others) },
         { key: 'cnum2', label: '协同部门二参与人数', type: 'number' },
         { key: 'total', label: '总参与人数', type: 'number', required: true },
-        { key: 'start', label: '开始时间', placeholder: '2026-11-20 09:00', required: true },
-        { key: 'end', label: '结束时间', placeholder: '2026-11-20 17:00', required: true },
+        { key: 'start', label: '开始时间', type: 'datetime-local', required: true },
+        { key: 'end', label: '结束时间', type: 'datetime-local', required: true },
         { key: 'place', label: '活动地点', required: true },
         { key: 'content', label: '活动内容', type: 'textarea', required: true }
       ],
-      values: { cdept1: others[0] || '无', cnum1: 5, cdept2: '无', cnum2: 0, total: 30, start: '2026-11-20 09:00', end: '2026-11-20 17:00', place: '学院广场' },
+      values: { cdept1: others[0] || '无', cnum1: 5, cdept2: '无', cnum2: 0, total: 30, start: '2026-11-20T09:00', end: '2026-11-20T17:00', place: '学院广场' },
       onSubmit(d) {
         const collaborators = [];
         if (d.cdept1 !== '无') collaborators.push({ dept: d.cdept1, count: d.cnum1 });
         if (d.cdept2 !== '无') collaborators.push({ dept: d.cdept2, count: d.cnum2 });
-        db.events.unshift({ id: uid('e'), title: d.title, desc: d.content, content: d.content, collaborators, total: d.total, quota: d.total, start: d.start, end: d.end, time: `${d.start} — ${d.end}`, place: d.place, publisher: cur.name, publisherRole: cur.role, date: today(), status: '报名中', signups: [] });
+        const start = d.start.replace('T', ' '), end = d.end.replace('T', ' ');
+        db.events.unshift({ id: uid('e'), title: d.title, desc: d.content, content: d.content, collaborators, total: d.total, quota: d.total, start, end, time: `${start} — ${end}`, place: d.place, publisher: cur.name, publisherRole: cur.role, date: today(), status: '报名中', signups: [] });
         commit('发布活动报名', d.title); render(); toast('活动已发布，成员可开始报名');
       }
     });
