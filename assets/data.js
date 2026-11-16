@@ -37,9 +37,9 @@ const SEED = {
     { id: 'd5', name: '权益服务部', leader: '赵一鸣', desc: '学生权益维护、意见反馈、文体活动组织。', status: '正常' }
   ],
 
-  /* ② 部门申请表（主席团提交 → 管理员审核） */
+  /* ② 部门申请表（主席团提交 → 责任教师审核） */
   deptRequests: [
-    { id: 'dr1', type: '新增', dept: '外联部', reason: '新增校企合作与外联事务职能', submitter: '吴雪枫', date: '2026-11-11', status: '待管理员审核' },
+    { id: 'dr1', type: '新增', dept: '外联部', reason: '新增校企合作与外联事务职能', submitter: '吴雪枫', date: '2026-11-11', status: '待责任教师审核' },
     { id: 'dr2', type: '编辑', dept: '实践部', reason: '负责人由黄婉清调整为马晨阳', submitter: '李思远', date: '2026-11-09', status: '已通过' }
   ],
 
@@ -62,7 +62,7 @@ const SEED = {
   leaves: [
     { id: 'l1', applicant: '何佳颖', applicantRole: 'student', dept: '宣传部', type: '病假', start: '2026-11-18', end: '2026-11-19', reason: '发热就医，附校医院诊断证明。', status: '待审核', reviewer: '部长/副部长', reviewNote: '', date: '2026-11-12' },
     { id: 'l2', applicant: '陈雨桐', applicantRole: 'minister', dept: '宣传部', type: '事假', start: '2026-11-21', end: '2026-11-21', reason: '回家参加亲属婚礼。', status: '待审核', reviewer: '主席团', reviewNote: '', date: '2026-11-11' },
-    { id: 'l3', applicant: '吴雪枫', applicantRole: 'presidium', dept: '主席团', type: '公假', start: '2026-11-15', end: '2026-11-16', reason: '赴昆明参加省级创新创业大赛答辩。', status: '已通过', reviewer: '管理员', reviewNote: '同意，注意补齐会议记录', date: '2026-11-08' },
+    { id: 'l3', applicant: '吴雪枫', applicantRole: 'presidium', dept: '主席团', type: '公假', start: '2026-11-15', end: '2026-11-16', reason: '赴昆明参加省级创新创业大赛答辩。', status: '已通过', reviewer: '责任教师', reviewNote: '同意，注意补齐会议记录', date: '2026-11-08' },
     { id: 'l4', applicant: '林小满', applicantRole: 'student', dept: '未加入', type: '事假', start: '2026-11-19', end: '2026-11-19', reason: '参加校内技能等级证书考试。', status: '待审核', reviewer: '部长/副部长', reviewNote: '', date: '2026-11-12' }
   ],
 
