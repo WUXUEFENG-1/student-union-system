@@ -276,12 +276,12 @@ function openApplyInfo(a) {
   }
   if (v.photo) rows += `<div><span>一寸证件照</span><img src="${v.photo}" style="height:96px;border:1px solid #d9e2ec;border-radius:6px"></div>`;
   const trackHtml = (a.track || []).map((t) =>
-    `<div class="perm-item"><span class="dot"></span>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div>`).join('')
+    `<div class="perm-item"><span class="dot"></span><div>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div></div>`).join('')
     || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>';
   const extra = (a.type === 'election' && a.status === '已通过')
     ? `<div class="row-actions" style="margin-top:12px"><button class="primary-btn light" id="elExportBtn">导出申请表</button></div>` : '';
   openInfo(a.typeName + ' · ' + a.name,
-    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批轨迹</div><div class="perm-list">${trackHtml}</div>`,
+    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${trackHtml}</div>`,
     '提交时间：' + a.date);
   const btn = document.getElementById('elExportBtn');
   if (btn) btn.onclick = () => electionExportPicker(a);
@@ -513,7 +513,7 @@ function buildZip(files) {
     cv.setUint16(32, 0, true);
     cv.setUint16(34, 0, true);
     cv.setUint16(36, 0, true);
-    cv.setUint32(38, 0, true);
+    cv.setUint16(38, 0, true);
     cv.setUint32(42, localOffset, true);
     central.push(ch, name);
     offset += 30 + name.length + data.length;
