@@ -143,7 +143,7 @@ const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes
 
 function tone(status) {
   if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
-  if (['待审核', '待审批', '待管理员审核', '待主席团审核', '待教师审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
+  if (['待审核', '待审批', '待管理员审核', '待主席团审核', '待教师审核', '待主席审核', '待副主席审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
   if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销', '已作废'].includes(status)) return 'red';
   return 'gray';
 }
@@ -484,9 +484,9 @@ function renderDashboard() {
           <button class="primary-btn light" data-go="notice">查看全部</button></div>
         <div class="notice-list">${db.notices.filter((n) => n.status === '已发布').slice(0, 3).map((n) => `
           <div class="notice-item">
-            <h4><span class="badge blue">${esc(n.type)}</span>${esc(n.title)}</h4>
-            <p>${esc(n.content)}</p>
-            <div class="notice-meta">${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）</div>
+            <h4><span class="badge blue">${esc(n.type || '通知公告')}</span>${esc(n.title)}</h4>
+            <p>${esc(String(n.content || '').replace(/\s+/g, ' ').slice(0, 96))}${String(n.content || '').length > 96 ? '…' : ''}</p>
+            <div class="notice-meta">${esc(n.date)} · 撰稿人：${esc(n.writer || n.publisherName)} ｜ 一审一校：${esc(n.check1 ? n.check1.name : '—')} ｜ 二审二校：${esc(n.check2 ? n.check2.name : '—')} ｜ 三审三校：${esc(n.check3 ? n.check3.name : '—')}</div>
           </div>`).join('') || '<div class="empty">暂无通知</div>'}
         </div>
       </div>
