@@ -351,6 +351,16 @@ function bindApplyView() {
       });
     };
   });
+  /* 申请事宜汇总：主席团、管理员可删除任意申请记录 */
+  document.querySelectorAll('[data-apply-summary-del]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applySummaryDel);
+      if (!a) return;
+      if (!confirm(`确定删除「${a.typeName} · ${a.name}」？删除后记录不可恢复。`)) return;
+      db.applies = db.applies.filter((x) => x.id !== a.id);
+      commit('删除申请', `${a.typeName} · ${a.name}`); save(); render(); toast('申请已删除');
+    };
+  });
 }
 
 /* 申请事宜汇总：按事项查看申请人与审批轨迹；部长团仅看本部门（秘书部除外），主席团/指导教师/管理员查看全部 */
@@ -365,8 +375,11 @@ function renderApplySummary() {
   const shown = summaryTypeFilter === '全部' ? list : list.filter((a) => a.typeName === summaryTypeFilter);
   const scopeText = seeAll ? '可查看全部部门申请' : `仅可查看本部门（${esc(cur.dept)}）申请`;
   const optHtml = typeNames.map((t) => `<option ${t === summaryTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const canDel = ['admin', 'presidium'].includes(cur.role);
   const rows = shown.slice().reverse().map((a) => {
     const flow = applyStages(a).join(' → ');
+    const ops = [`<button class="link-btn" data-apply-view="${a.id}">查看</button>`];
+    if (canDel) ops.push(`<button class="link-btn del" data-apply-summary-del="${a.id}">删除</button>`);
     return `<tr>
       <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
@@ -375,7 +388,7 @@ function renderApplySummary() {
       <td class="nowrap">${esc(a.date)}</td>
       <td>${badge(a.status)}</td>
       <td><div class="cell-sub">${esc(flow)}</div><div class="cell-sub">${esc(applyTrackHtml(a))}</div></td>
-      <td><div class="row-actions"><button class="link-btn" data-apply-view="${a.id}">查看</button></div></td>
+      <td><div class="row-actions">${ops.join('')}</div></td>
     </tr>`;
   }).join('');
   $('#views').innerHTML = `
