@@ -164,6 +164,9 @@ select.filter {
 }
 .primary-btn:hover { background: var(--blue-500); }
 .primary-btn.light { background: var(--blue-100); color: var(--blue-600); box-shadow: none; }
+.primary-btn.del { background: #fdeaea; color: var(--danger); box-shadow: none; }
+.primary-btn.del:hover { background: #fbe0e0; }
+button:disabled, .primary-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 /* ================= 表格 ================= */
 .table-wrap { overflow-x: auto; }

@@ -376,11 +376,14 @@ function renderApplySummary() {
   const scopeText = seeAll ? '可查看全部部门申请' : `仅可查看本部门（${esc(cur.dept)}）申请`;
   const optHtml = typeNames.map((t) => `<option ${t === summaryTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const canDel = ['admin', 'presidium'].includes(cur.role);
+  const colSpan = canDel ? 9 : 8;
   const rows = shown.slice().reverse().map((a) => {
     const flow = applyStages(a).join(' → ');
     const ops = [`<button class="link-btn" data-apply-view="${a.id}">查看</button>`];
     if (canDel) ops.push(`<button class="link-btn del" data-apply-summary-del="${a.id}">删除</button>`);
+    const checkCell = canDel ? `<td><input type="checkbox" class="summary-check" data-apply-check="${a.id}"></td>` : '';
     return `<tr>
+      ${checkCell}
       <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
       <td>${esc(a.dept)}</td>
@@ -391,19 +394,48 @@ function renderApplySummary() {
       <td><div class="row-actions">${ops.join('')}</div></td>
     </tr>`;
   }).join('');
+  const headCheck = canDel ? '<th style="width:38px"><input type="checkbox" id="summaryCheckAll"></th>' : '';
+  const bulkBtn = canDel ? '<button class="primary-btn light del" id="summaryBulkDel" disabled>批量删除（0）</button>' : '';
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
         <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，按申请事项筛选，审批流程与轨迹全程留痕</div></div>
-        <div class="field" style="min-width:220px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
+        <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          ${bulkBtn}
+          <div class="field" style="min-width:220px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
+        </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>申请人</th><th>申请事项</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="8" class="empty">暂无申请记录</td></tr>'}</tbody>
+        <thead><tr>${headCheck}<th>申请人</th><th>申请事项</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="${colSpan}" class="empty">暂无申请记录</td></tr>`}</tbody>
       </table></div>
     </div>`;
   const sel = $('#summaryType');
   if (sel) sel.onchange = () => { summaryTypeFilter = sel.value; render(); };
+  if (canDel) {
+    const checks = () => [...document.querySelectorAll('.summary-check')];
+    const updateBulk = () => {
+      const checked = document.querySelectorAll('.summary-check:checked');
+      const n = checked.length;
+      const btn = $('#summaryBulkDel');
+      if (btn) { btn.textContent = `批量删除（${n}）`; btn.disabled = n === 0; }
+      const all = $('#summaryCheckAll');
+      if (all) all.checked = n > 0 && n === checks().length;
+    };
+    const allBox = $('#summaryCheckAll');
+    if (allBox) allBox.onchange = () => { checks().forEach((c) => { c.checked = allBox.checked; }); updateBulk(); };
+    checks().forEach((c) => { c.onchange = updateBulk; });
+    const bulk = $('#summaryBulkDel');
+    if (bulk) bulk.onclick = () => {
+      const ids = checks().filter((c) => c.checked).map((c) => c.dataset.applyCheck);
+      if (!ids.length) { toast('请先勾选要删除的申请'); return; }
+      if (!confirm(`确定删除选中的 ${ids.length} 条申请？删除后记录不可恢复。`)) return;
+      const removed = db.applies.filter((a) => ids.includes(a.id));
+      db.applies = db.applies.filter((a) => !ids.includes(a.id));
+      commit('批量删除申请', `删除 ${removed.length} 条：` + removed.map((a) => `${a.typeName}·${a.name}`).join('、'));
+      save(); render(); toast(`已删除 ${ids.length} 条申请`);
+    };
+  }
   bindApplyView();
 }
 
