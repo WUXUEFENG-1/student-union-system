@@ -160,10 +160,25 @@
     }).catch(function () { status('云端离线 · 仅本机数据可用', false); markReady(); });
   }
 
-  /* 包装 save()：先写本地，防抖后回写云端 */
+  /* 对比上一份快照，记录被删除条目的墓碑：本地删除后，下次云端合并不再把旧副本并回来 */
+  function markRemovedGone() {
+    try {
+      const prev = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      db.__removed = db.__removed || {};
+      UNION_ARRAYS.forEach(function (k) {
+        const prevArr = Array.isArray(prev[k]) ? prev[k] : [];
+        const curIds = new Set((db[k] || []).map(idOf));
+        const gone = prevArr.map(idOf).filter(function (id) { return id && !curIds.has(id); });
+        if (gone.length) db.__removed[k] = Array.from(new Set([...(db.__removed[k] || []), ...gone]));
+      });
+    } catch (e) { /* 快照损坏时忽略墓碑对比 */ }
+  }
+
+  /* 包装 save()：先记录删除墓碑，写本地，防抖后回写云端 */
   const _save = save;
   let timer = null;
   save = function () {
+    markRemovedGone();
     _save();
     try { db[FLAG] = iso(); } catch (e) { /* 忽略 */ }
     localStorage.setItem(PENDING, '1');
