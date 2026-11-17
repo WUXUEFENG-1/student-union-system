@@ -77,6 +77,7 @@
         /* 先把云端已有流水并入本机快照，避免整份回写时冲掉他人刚提交、本机尚未拉取的申请/日志 */
         const remote = normalize(JSON.parse(JSON.stringify(row.data)));
         mergeBoth(remote, snap);
+        remote.__removed = Object.assign({}, snap.__removed || {}, remote.__removed || {});
         snap = remote;
       }
       const payload = { id: ROW_ID, data: snap, updated_at: iso() };
@@ -104,14 +105,16 @@
     if (ta !== tb) return ta > tb ? a : b;
     return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
   }
-  /* 双向合并流水表到 remote（原地修改并返回）：并集 + 同 id 取较新；主数据字段不动 */
+  /* 双向合并流水表到 remote（原地修改并返回）：并集 + 同 id 取较新；被本地删除的墓碑条目不再并回 */
   function mergeBoth(remote, local) {
+    const rem = local.__removed || {};
     UNION_ARRAYS.forEach(function (k) {
       const rArr = Array.isArray(remote[k]) ? remote[k] : [];
       const lArr = Array.isArray(local[k]) ? local[k] : [];
+      const remIds = new Set(rem[k] || []);
       if (!rArr.length && !lArr.length) return;
       const map = new Map();
-      rArr.forEach(function (x) { map.set(idOf(x), x); });
+      rArr.forEach(function (x) { const id = idOf(x); if (!remIds.has(id)) map.set(id, x); });
       lArr.forEach(function (x) {
         const id = idOf(x);
         map.set(id, map.has(id) ? newer(map.get(id), x) : x);
@@ -128,6 +131,8 @@
     const local = cleanSnapshot();
     const before = JSON.stringify(remote);
     mergeBoth(remote, local);
+    /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
+    remote.__removed = Object.assign({}, local.__removed || {}, remote.__removed || {});
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
