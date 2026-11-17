@@ -29,7 +29,7 @@ importMembers = function (text) {
       Object.assign(mem, profile, { status: mem.status || '在任' });
       if (account) mem.account = account;
       const acc = db.accounts.find((a) => a.username === mem.account) || (account ? db.accounts.find((a) => a.username === account) : null);
-      if (acc) Object.assign(acc, { name, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics, role: ['admin', 'teacher'].includes(acc.role) ? acc.role : roleFromTitle(titleName) });
+      if (acc) Object.assign(acc, { name, dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics, role: ['admin', 'teacher'].includes(acc.role) ? acc.role : roleFromTitle(titleName) });
       updated++;
       messages.push(`第 ${idx + 1} 行「${name}」已按表同步更新`);
     } else {
@@ -37,7 +37,7 @@ importMembers = function (text) {
       if (account) {
         if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未重复创建`); }
         else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
-        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
       }
       added++;
     }
