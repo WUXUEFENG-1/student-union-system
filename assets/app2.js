@@ -91,18 +91,19 @@ function actForm(id) {
       { key: 'cdept2', label: '协同部门二', type: 'select', options: ['无'].concat(others) },
       { key: 'cnum2', label: '协同部门二参与人数', type: 'number' },
       { key: 'total', label: '总参与人数', type: 'number', required: true },
-      { key: 'start', label: '开始时间', placeholder: '2026-11-20 09:00', required: true },
-      { key: 'end', label: '结束时间', placeholder: '2026-11-20 17:00', required: true },
+      { key: 'start', label: '开始时间', type: 'datetime-local', required: true },
+      { key: 'end', label: '结束时间', type: 'datetime-local', required: true },
       { key: 'place', label: '活动地点', required: true },
       { key: 'content', label: '活动内容', type: 'textarea', required: true }
     ],
-    values: Object.assign({ cdept1: others[0], cnum1: 5, cdept2: '无', cnum2: 0, total: 20, start: '2026-11-20 09:00', end: '2026-11-20 17:00', place: '学院广场', content: '' },
-      a.id ? { cdept1: c1.dept, cnum1: c1.count, cdept2: c2.dept, cnum2: c2.count } : {}, a),
+    values: Object.assign({ cdept1: others[0], cnum1: 5, cdept2: '无', cnum2: 0, total: 20, start: '2026-11-20T09:00', end: '2026-11-20T17:00', place: '学院广场', content: '' },
+      a.id ? { cdept1: c1.dept, cnum1: c1.count, cdept2: c2.dept, cnum2: c2.count } : {}, a,
+      { start: (a && a.start || '2026-11-20 09:00').replace(' ', 'T'), end: (a && a.end || '2026-11-20 17:00').replace(' ', 'T') }),
     onSubmit(d) {
       const collaborators = [];
       if (d.cdept1 !== '无') collaborators.push({ dept: d.cdept1, count: d.cnum1 });
       if (d.cdept2 !== '无') collaborators.push({ dept: d.cdept2, count: d.cnum2 });
-      const payload = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: d.start, end: d.end, place: d.place, content: d.content, status: '待主席团审核', approver: '', reason: '', stage1: '', stage2: '' };
+      const payload = { title: d.title, dept: cur.dept, collaborators, total: d.total, start: String(d.start).replace('T', ' '), end: String(d.end).replace('T', ' '), place: d.place, content: d.content, status: '待主席团审核', approver: '', reason: '', stage1: '', stage2: '' };
       if (id) Object.assign(a, payload);
       else db.activities.push(Object.assign({ id: uid('a') }, payload));
       commit(id ? '修改活动申请' : '提交活动申请', d.title); render(); toast(id ? '已提交修改，等待审批' : '活动申请已提交，等待审批');
@@ -683,7 +684,7 @@ function renderLeave() {
         <tbody>${visible.length ? visible.slice().reverse().map((l) => `
           <tr><td><strong>${esc(l.applicant)}</strong></td><td>${esc(ROLE_NAMES[l.applicantRole] || l.applicantRole)}</td><td>${esc(l.dept)}</td>
             <td>${esc(l.type)}</td><td class="nowrap">${esc(l.start)}<br>${esc(l.end)}</td>
-            <td>${esc(l.reason)}${l.attach ? `<div class="cell-sub">附件：${esc(l.attach)}</div>` : ''}${l.reviewNote ? `<div class="cell-sub">审核意见：${esc(l.reviewNote)}</div>` : ''}</td>
+            <td>${esc(l.reason)}${l.attach ? (l.attachData ? `<div class="cell-sub">附件：<button class="link-btn" data-leave-file="${l.id}">${esc(l.attach)}</button></div>` : `<div class="cell-sub">附件：${esc(l.attach)}</div>`) : ''}${l.reviewNote ? `<div class="cell-sub">审核意见：${esc(l.reviewNote)}</div>` : ''}</td>
             <td>${esc(l.reviewer)}</td><td>${badge(l.status)}</td>
             <td><div class="row-actions">
               ${canReviewLeave(l) ? `<button class="link-btn" data-leave-pass="${l.id}">通过</button><button class="link-btn del" data-leave-reject="${l.id}">驳回</button>` : ''}
@@ -702,11 +703,11 @@ function renderLeave() {
         { key: 'start', label: '开始日期', type: 'date', required: true },
         { key: 'end', label: '结束日期', type: 'date', required: true },
         { key: 'reason', label: '请假原因', type: 'textarea', required: true, placeholder: '请填写具体事由与相关证明' },
-        { key: 'attach', label: '附件（可选，如病假证明文件名）' }
+        { key: 'attach', label: '附件（可选，如病假证明）', type: 'file' }
       ],
       values: { start: today(), end: today() },
       onSubmit(d) {
-        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, attach: d.attach || '', status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today() });
+        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, attach: d.attach || '', attachData: d.attachData || '', status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today() });
         commit('提交请假', `${d.type} ${d.start}—${d.end}`); render(); toast('请假申请已提交');
       }
     });
@@ -748,6 +749,15 @@ function renderLeave() {
       commit('删除请假记录', `${l.applicant} ${l.type} ${l.start}—${l.end}`);
       db.leaves = db.leaves.filter((x) => x.id !== l.id);
       save(); render(); toast('请假记录已删除');
+    };
+  });
+  document.querySelectorAll('[data-leave-file]').forEach((b) => {
+    b.onclick = () => {
+      const l = db.leaves.find((x) => x.id === b.dataset.leaveFile);
+      if (!l) return;
+      if (!l.attachData) { toast('附件内容缺失'); return; }
+      try { downloadDataUrl(l.attachData, l.attach); commit('下载请假附件', `${l.applicant} ${l.type}`); }
+      catch (e) { toast('附件解析失败'); }
     };
   });
 }

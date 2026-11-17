@@ -202,6 +202,15 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+function downloadDataUrl(dataUrl, filename) {
+  const arr = String(dataUrl).split(',');
+  const mime = (arr[0].match(/data:([^;]+)/) || [, 'application/octet-stream'])[1];
+  const bin = atob(arr[1] || '');
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i);
+  downloadBlob(new Blob([buf], { type: mime }), filename);
+}
+
 function buildTableHtml(headers, rows) {
   const th = headers.map((h) => `<th>${esc(h)}</th>`).join('');
   const trs = rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c == null ? '' : c)}</td>`).join('')}</tr>`).join('');
@@ -283,13 +292,42 @@ function openForm({ title, fields = [], values = {}, okText = '保存', hint = '
     if (f.type === 'textarea') {
       return `<div class="field"><label>${esc(f.label)}</label><textarea id="f_${f.key}"${req}${ph}>${esc(v)}</textarea></div>`;
     }
+    if (f.type === 'file') {
+      const curName = v ? esc(v) : '';
+      return `<div class="field"><label>${esc(f.label)}</label><input type="file" id="f_${f.key}" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input">${curName ? `<div class="form-hint">当前附件：${curName}</div>` : ''}</div>`;
+    }
+    if (f.type === 'hidden') {
+      return `<input type="hidden" id="f_${f.key}" value="${esc(v)}">`;
+    }
     return `<div class="field"><label>${esc(f.label)}</label><input id="f_${f.key}" type="${f.type || 'text'}" value="${esc(v)}"${req}${ph}></div>`;
   }).join('') + extra;
+  const fileData = {};
+  fields.filter((f) => f.type === 'file').forEach((f) => {
+    const el = $('#f_' + f.key);
+    if (!el) return;
+    el.onchange = (e) => {
+      const file = e.target.files[0];
+      fileData[f.key] = '';
+      if (!file) return;
+      if (file.size > 800 * 1024) { toast('附件请控制在 800KB 以内'); e.target.value = ''; return; }
+      const rd = new FileReader();
+      rd.onload = () => { fileData[f.key] = rd.result; };
+      rd.readAsDataURL(file);
+    };
+  });
   modalSubmit = () => {
     const data = {};
     for (const f of fields) {
       const el = $('#f_' + f.key);
       if (!el) continue;
+      if (f.type === 'file') {
+        const file = el.files && el.files[0];
+        const name = file ? file.name : (values[f.key] || '');
+        if (f.required && !name) { el.focus(); toast('请上传' + f.label); return; }
+        data[f.key] = name;
+        data[f.key + 'Data'] = fileData[f.key] || (values[f.key + 'Data'] || '');
+        continue;
+      }
       const val = el.value.trim();
       if (f.required && !val) { el.focus(); toast('请填写' + f.label); return; }
       data[f.key] = f.type === 'number' ? Number(val || 0) : val;
@@ -379,7 +417,12 @@ $('#loginUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#
 $('#logoutBtn').onclick = () => {
   commit('退出登录', `账号 ${cur.username}`);
   sessionStorage.removeItem(SESS_KEY);
-  location.reload();
+  /* 先把本机暂存的申请/日志推上云端，再刷新重登，避免新提交在重登后被云端旧快照覆盖 */
+  const flush = typeof window.__flushSync === 'function' ? window.__flushSync() : Promise.resolve(true);
+  let reloaded = false;
+  const reload = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+  Promise.resolve(flush).then(reload).catch(reload);
+  setTimeout(reload, 1500);
 };
 $('#menuBtn').onclick = (e) => { e.stopPropagation(); document.querySelector('.sidebar').classList.toggle('open'); };
 document.addEventListener('click', (e) => {

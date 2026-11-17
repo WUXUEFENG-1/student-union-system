@@ -19,7 +19,7 @@ APPLY_TYPES.appeal = {
     { key: 'target', label: '关联考核对象（学期 / 被考核人）', required: true, placeholder: '如：2026-2027 学年第一学期 · 本人' },
     { key: 'dim', label: '申诉维度', type: 'select', options: ['出勤', '工作任务', '思想纪律', '群众评价', '总分'] },
     { key: 'reason', label: '申诉理由', type: 'textarea', required: true },
-    { key: 'proof', label: '佐证材料（证书 / 记录 / 截图文件名）' }
+    { key: 'proof', label: '佐证材料（证书 / 记录 / 截图，选填）', type: 'file' }
   ]
 };
 
@@ -32,7 +32,7 @@ APPLY_TYPES.actChange = {
     { key: 'changeItem', label: '变更项', type: 'select', options: ['活动时间', '活动地点', '报名名额', '其他信息'] },
     { key: 'after', label: '变更后内容', type: 'textarea', required: true },
     { key: 'reason', label: '变更理由', type: 'textarea', required: true },
-    { key: 'attach', label: '附件（选填）' }
+    { key: 'attach', label: '附件（选填）', type: 'file' }
   ]
 };
 
@@ -79,7 +79,7 @@ APPLY_TYPES.election = {
     { key: 'deptKnow', label: '部门认识', type: 'textarea', required: true },
     { key: 'manifesto', label: '竞选宣言', type: 'textarea' },
     { key: 'workBrief', label: '学生会工作简述', type: 'textarea' },
-    { key: 'awards', label: '评优获奖佐证材料' },
+    { key: 'awards', label: '评优获奖佐证材料（选填）', type: 'file' },
     { key: 'obey', label: '是否服从岗位调剂', type: 'select', options: ['是', '否'] },
     { key: 'photo', type: 'hidden' }
   ]
@@ -117,10 +117,10 @@ enterApp = function (acc) {
 const _openFormPatch = openForm;
 openForm = function (opts) {
   const body = _openFormPatch(opts);
-  if (opts && opts.title === '活动公假证明申请') {
+  if (opts && (opts.type === 'publicLeave' || opts.title === '活动公假证明申请')) {
     ['#f_period', '#f_courses'].forEach((sel) => {
       const el = body.querySelector(sel);
-      if (el) { el.type = 'hidden'; el.value = ''; }
+      if (el) { const wrap = el.closest('.field'); if (wrap) wrap.style.display = 'none'; el.value = ''; }
     });
     body.insertAdjacentHTML('beforeend', `
       <div class="field"><label>活动开始时间</label><input type="datetime-local" id="plStart" required></div>
@@ -145,7 +145,29 @@ openForm = function (opts) {
       origSubmit();
     };
   }
-  if (opts && opts.title === '换届竞选报名') {
+  if (opts && (opts.type === 'cert' || opts.type === 'volunteer' || opts.title === '任职证明申请' || opts.title === '志愿服务认定申请')) {
+    const isCert = opts.type ? opts.type === 'cert' : opts.title === '任职证明申请';
+    const srcKey = isCert ? 'range' : 'period';
+    const srcEl = body.querySelector('#f_' + srcKey);
+    const oldVal = srcEl ? srcEl.value : '';
+    if (srcEl) { const wrap = srcEl.closest('.field'); if (wrap) wrap.style.display = 'none'; srcEl.value = ''; }
+    let preStart = '', preEnd = '';
+    const pm = String(oldVal).split(/\s*至\s*/);
+    if (pm.length === 2) { preStart = pm[0].trim(); preEnd = pm[1].trim(); }
+    body.insertAdjacentHTML('beforeend', `
+      <div class="field"><label>${isCert ? '任职开始日期' : '活动开始日期'}</label><input type="date" id="f_${srcKey}Start" value="${esc(preStart)}" required></div>
+      <div class="field"><label>${isCert ? '任职结束日期' : '活动结束日期'}</label><input type="date" id="f_${srcKey}End" value="${esc(preEnd)}" required></div>
+    `);
+    const origSubmit = modalSubmit;
+    modalSubmit = function () {
+      const s = body.querySelector('#f_' + srcKey + 'Start').value;
+      const e = body.querySelector('#f_' + srcKey + 'End').value;
+      if (!s || !e) { toast('请选择完整的起止日期'); return; }
+      if (srcEl) srcEl.value = `${s} 至 ${e}`;
+      origSubmit();
+    };
+  }
+  if (opts && (opts.type === 'election' || opts.title === '换届竞选报名')) {
     const photoField = document.createElement('div');
     photoField.className = 'field';
     photoField.innerHTML = '<label>一寸证件照（上传后自动填入申请表照片位）</label><input type="file" id="elPhoto" accept="image/png,image/jpeg,image/jpg" class="file-input">';
@@ -182,7 +204,7 @@ function canApprove(a) {
     if (a.stage === 3) return t === '主席';
     return false;
   }
-  if (cur.role === 'minister') return a.stage === 0;
+  if (cur.role === 'minister') return a.stage === 0 && cur.dept === a.dept;
   if (cur.role === 'presidium') return a.stage === 1;
   return false;
 }
@@ -271,8 +293,14 @@ function openApplyInfo(a) {
   let rows = auto.map(([l, val]) => `<div><span>${esc(l)}</span><strong>${esc(val)}</strong></div>`).join('');
   const cfg = APPLY_TYPES[a.type];
   if (cfg && cfg.fields) {
-    rows += cfg.fields.filter((f) => f.key !== 'photo').map((f) =>
-      `<div><span>${esc(f.label)}</span><strong>${esc(v[f.key] || '—')}</strong></div>`).join('');
+    rows += cfg.fields.filter((f) => f.key !== 'photo').map((f) => {
+      const val = v[f.key] || '';
+      if (f.type === 'file') {
+        if (val && v[f.key + 'Data']) return `<div><span>${esc(f.label)}</span><strong><button class="link-btn" data-apply-file="${a.id}" data-fkey="${f.key}">${esc(val)}</button></strong></div>`;
+        return `<div><span>${esc(f.label)}</span><strong>${esc(val || '—')}</strong></div>`;
+      }
+      return `<div><span>${esc(f.label)}</span><strong>${esc(val || '—')}</strong></div>`;
+    }).join('');
   }
   if (v.photo) rows += `<div><span>一寸证件照</span><img src="${v.photo}" style="height:96px;border:1px solid #d9e2ec;border-radius:6px"></div>`;
   const trackHtml = (a.track || []).map((t) =>
@@ -285,6 +313,18 @@ function openApplyInfo(a) {
     '提交时间：' + a.date);
   const btn = document.getElementById('elExportBtn');
   if (btn) btn.onclick = () => electionExportPicker(a);
+  document.querySelectorAll('[data-apply-file]').forEach((b) => {
+    b.onclick = () => {
+      const rec = (db.applies || []).find((x) => x.id === b.dataset.applyFile);
+      if (!rec) return;
+      const dk = b.dataset.fkey + 'Data';
+      const url = (rec.values && rec.values[dk]) || '';
+      const name = (rec.values && rec.values[b.dataset.fkey]) || '附件';
+      if (!url) { toast('附件内容缺失'); return; }
+      try { downloadDataUrl(url, name); commit('下载申请附件', `${rec.typeName} · ${rec.name}`); }
+      catch (e) { toast('附件解析失败'); }
+    };
+  });
 }
 
 function rebindApplyView() {
@@ -343,6 +383,7 @@ render = function () {
         const btn = tr.querySelector('[data-apply-pass],[data-apply-reject]');
         const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyPass || btn.dataset.applyReject));
         if (!a) return;
+        if (cur.role === 'minister' && a.type !== 'election' && a.dept !== cur.dept) { tr.remove(); return; }
         let show;
         if (a.type === 'election') {
           show = cur.role === 'minister' ? a.stage <= 1 : a.stage >= 2;

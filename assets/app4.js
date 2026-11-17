@@ -10,7 +10,7 @@ const APPLY_TYPES = {
       { key: 'reason', label: '调整理由', type: 'textarea', required: true },
       { key: 'handover', label: '原部门待办工作安排', type: 'textarea' },
       { key: 'agree', label: '是否征得原部门初步同意', type: 'select', options: ['是', '否'] },
-      { key: 'attach', label: '附件（可选）' }
+      { key: 'attach', label: '附件（可选）', type: 'file' }
     ]
   },
   transfer: {
@@ -23,7 +23,7 @@ const APPLY_TYPES = {
       { key: 'reason', label: '调动理由', type: 'textarea', required: true },
       { key: 'handover', label: '原部门待办工作安排', type: 'textarea' },
       { key: 'agree', label: '是否征得原部门初步同意', type: 'select', options: ['是', '否'] },
-      { key: 'attach', label: '附件（可选）' }
+      { key: 'attach', label: '附件（可选）', type: 'file' }
     ]
   },
   leaveclub: {
@@ -35,7 +35,7 @@ const APPLY_TYPES = {
       { key: 'reason', label: '退会理由', type: 'textarea', required: true },
       { key: 'handoverDone', label: '是否完成工作交接', type: 'select', options: ['是', '否'] },
       { key: 'handoverNote', label: '交接说明', type: 'textarea' },
-      { key: 'attach', label: '附件（可选，交接清单）' },
+      { key: 'attach', label: '附件（可选，交接清单）', type: 'file' },
       { key: 'promise', label: '承诺勾选（填写"已知晓并承诺"）', required: true }
     ]
   },
@@ -50,7 +50,7 @@ const APPLY_TYPES = {
       { key: 'detail', label: '详细内容', type: 'textarea', required: true },
       { key: 'targetDept', label: '指定对接部门', type: 'select', options: DEPTS },
       { key: 'contact', label: '联系方式（匿名模式下隐藏）' },
-      { key: 'attach', label: '佐证附件' }
+      { key: 'attach', label: '佐证附件（选填）', type: 'file' }
     ]
   },
   report: {
@@ -61,7 +61,7 @@ const APPLY_TYPES = {
     fields: [
       { key: 'period', label: '述职学期', required: true },
       { key: 'summary', label: '述职摘要', type: 'textarea', required: true },
-      { key: 'reportFile', label: '述职报告文件名（Word / PDF）' },
+      { key: 'reportFile', label: '述职报告（Word / PDF，选填）', type: 'file' },
       { key: 'selfEval', label: '工作自评', type: 'textarea' },
       { key: 'plan', label: '后续工作规划', type: 'textarea' }
     ]
@@ -74,7 +74,7 @@ const APPLY_TYPES = {
       { key: 'title', label: '竞选岗位', required: true },
       { key: 'manifesto', label: '竞选宣言', type: 'textarea', required: true },
       { key: 'workBrief', label: '学生会工作简述', type: 'textarea' },
-      { key: 'awards', label: '评优获奖佐证材料' },
+      { key: 'awards', label: '评优获奖佐证材料（选填）', type: 'file' },
       { key: 'obey', label: '是否服从岗位调剂', type: 'select', options: ['是', '否'] }
     ]
   },
@@ -99,7 +99,7 @@ const APPLY_TYPES = {
       { key: 'period', label: '起止时间', required: true },
       { key: 'hours', label: '总服务时长（小时）', type: 'number', required: true },
       { key: 'brief', label: '活动简介', type: 'textarea' },
-      { key: 'proof', label: '证明材料（证书 / 签到表 / 截图文件名）' }
+      { key: 'proof', label: '证明材料（证书 / 签到表 / 截图，选填）', type: 'file' }
     ]
   },
   publicLeave: {
@@ -114,7 +114,7 @@ const APPLY_TYPES = {
       { key: 'explanation', label: '申请说明', type: 'textarea', required: true },
       { key: 'phone', label: '联系电话', required: true },
       { key: 'copiesPurpose', label: '申请份数与用途', required: true, placeholder: '填写使用用途、需要份数' },
-      { key: 'attach', label: '活动通知或策划附件（选填）' }
+      { key: 'attach', label: '活动通知或策划附件（选填）', type: 'file' }
     ]
   }
 };
@@ -365,7 +365,6 @@ function renderJoin() {
   function applyForm(key, existing) {
     const cfg = APPLY_TYPES[key];
     const isPL = key === 'publicLeave';
-    let attachName = existing && existing.values ? existing.values.attach || '' : '';
     const presetExplain = '活动期间该生将按要求完成活动任务，后续会主动补齐课堂笔记、完成作业，不影响学业。';
     const autoInfo = isPL ? `<div class="info-list" style="margin-bottom:10px">
       <div><span>姓名（自动带出）</span><strong>${esc(cur.name)}</strong></div>
@@ -375,13 +374,13 @@ function renderJoin() {
       <div><span>所属部门（自动带出）</span><strong>${esc(cur.dept || '—')}</strong></div>
     </div>` : '';
     const body = openForm({
+      type: key,
       title: existing ? cfg.name + ' · 重新编辑' : cfg.name,
       hint: cfg.hint,
       fields: cfg.fields,
-      extra: autoInfo + (isPL ? '<div class="field"><label>活动通知或策划附件（选填）</label><input type="file" id="plAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>' : ''),
+      extra: autoInfo,
       values: Object.assign({ toDept: cur.dept, toTitle: cur.title, targetDept: cur.dept, anonymous: '实名', category: '建议', obey: '是', agree: '否', handoverDone: '是', leaveType: '自愿申请', explanation: presetExplain, phone: cur.phone || '', copiesPurpose: '1 份，用于课程请假备案' }, existing ? existing.values : {}),
       onSubmit(d) {
-        if (isPL) d.attach = attachName;
         if (existing) {
           existing.values = d;
           existing.status = existing.type === 'feedback' ? '待分派' : '待审核';
@@ -400,7 +399,6 @@ function renderJoin() {
         render(); toast(existing ? '已修改并重新提交，等待审批' : '申请已提交');
       }
     });
-    if (isPL) body.querySelector('#plAttach').onchange = (e) => { attachName = e.target.files[0] ? e.target.files[0].name : ''; };
   }
 
   document.querySelectorAll('[data-apply-view]').forEach((b) => {
@@ -414,7 +412,17 @@ function renderJoin() {
         const manual = Object.entries(PL_LABELS).map(([k, label]) => [label, v[k] || '—']);
         rowsHtml = auto.concat(manual).map(([label, val]) => `<div><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`).join('');
       } else {
-        rowsHtml = Object.entries(v).map(([k, val]) => `<div><span>${esc(k)}</span><strong>${esc(val || '—')}</strong></div>`).join('');
+        const cfg = APPLY_TYPES[a.type] || {};
+        const labelMap = {};
+        (cfg.fields || []).forEach((f) => { labelMap[f.key] = f.label; });
+        rowsHtml = Object.entries(v).map(([k, val]) => {
+          if (/Data$/.test(k)) return '';
+          const label = labelMap[k] || k;
+          const dataKey = k + 'Data';
+          let inner = esc(val || '—');
+          if (val && v[dataKey]) inner = `<button class="link-btn" data-apply-file="${a.id}" data-fkey="${k}">${esc(val)}</button>`;
+          return `<div><span>${esc(label)}</span><strong>${inner}</strong></div>`;
+        }).join('');
       }
       const track = (a.track || []).map((t) => `<div class="perm-item"><span class="dot"></span><div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div></div>`).join('');
       const isOwner = a.name === cur.name;
@@ -436,6 +444,25 @@ function renderJoin() {
         a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '作废申请', note: '证明作废，归档保留', time: today() });
         commit('作废公假证明', `${a.proofNo} · ${a.name}`); save(); closeModal(); render(); toast('申请已作废，记录归档');
       };
+      document.querySelectorAll('[data-apply-file]').forEach((b) => {
+        b.onclick = () => {
+          const rec = db.applies.find((x) => x.id === b.dataset.applyFile);
+          if (!rec) return;
+          const dk = b.dataset.fkey + 'Data';
+          const url = (rec.values && rec.values[dk]) || '';
+          const name = (rec.values && rec.values[b.dataset.fkey]) || '附件';
+          if (!url) { toast('附件内容缺失'); return; }
+          try {
+            const arr = String(url).split(',');
+            const mime = (arr[0].match(/data:([^;]+)/) || [, 'application/octet-stream'])[1];
+            const bin = atob(arr[1] || '');
+            const buf = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i);
+            downloadBlob(new Blob([buf], { type: mime }), name);
+            commit('下载申请附件', `${rec.typeName} · ${rec.name}`);
+          } catch (e) { toast('附件解析失败'); }
+        };
+      });
     };
   });
   document.querySelectorAll('[data-apply-cancel]').forEach((b) => {
