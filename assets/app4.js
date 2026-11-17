@@ -125,11 +125,19 @@ function applyTypesVisible() {
 function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
+/* 申请人为部长/副部长时，审批链固定为：副主席审核 → 主席审核；其余身份走各类型默认链 */
+function isMinisterApplicant(a) {
+  return a.applicantRole === 'minister' || ['部长', '副部长'].includes(a.title);
+}
+function applyStages(a) {
+  const cfg = APPLY_TYPES[a.type];
+  if (isMinisterApplicant(a)) return ['副主席审核', '主席审核'];
+  return (Array.isArray(a.flow) && a.flow.length) ? a.flow : (cfg ? cfg.stages : []);
+}
 
 /* 审批流转可视化：申请人提交 → 各审批节点（绿=已完成 / 蓝=当前节点 / 灰=待处理 / 红=终止） */
 function flowTimelineHtml(a) {
-  const cfg = APPLY_TYPES[a.type];
-  const nodes = (Array.isArray(a.flow) && a.flow.length) ? a.flow : (cfg && cfg.stages) || [];
+  const nodes = applyStages(a);
   const doneAll = ['已通过', '已答复'].includes(a.status);
   const stopped = ['已驳回', '已撤回', '已作废'].includes(a.status);
   const stage = a.stage || 0;
@@ -251,7 +259,8 @@ function exportPublicLeave(a, fmt, archive) {
   commit(archive ? '导出公假证明存档' : '下载公假证明', `${a.proofNo} · ${a.name}（${ROLE_NAMES[cur.role]}）`);
 }
 function applyRow(a, review) {
-  const canReview = allPower() || (cur.role === 'minister' && a.dept === cur.dept);
+  const ministerApprover = cur.role === 'minister' && a.dept === cur.dept && !isMinisterApplicant(a);
+  const canReview = allPower() || ministerApprover;
   const pending = ['待审核', '审核中', '待分派', '处理中'].includes(a.status);
   const stage0 = (a.stage || 0) === 0;
   const terminalRejected = ['已驳回', '已撤回', '已作废'].includes(a.status);
@@ -277,12 +286,120 @@ function applyRow(a, review) {
   return `<tr>${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
 }
 
+function bindApplyView() {
+  document.querySelectorAll('[data-apply-view]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyView);
+      const v = a.values || {};
+      const PL_LABELS = { activityName: '参加活动名称', period: '活动起止时间', place: '活动地点', courses: '请假课程及日期', explanation: '申请说明', phone: '联系电话', copiesPurpose: '申请份数与用途', attach: '活动通知或策划附件' };
+      let rowsHtml;
+      if (a.type === 'publicLeave') {
+        const auto = [['姓名', a.name], ['学号', a.sno], ['专业', a.major || '—'], ['班级', a.class || '—'], ['所属部门', a.dept]];
+        const manual = Object.entries(PL_LABELS).map(([k, label]) => [label, v[k] || '—']);
+        rowsHtml = auto.concat(manual).map(([label, val]) => `<div><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`).join('');
+      } else {
+        const cfg = APPLY_TYPES[a.type] || {};
+        const labelMap = {};
+        (cfg.fields || []).forEach((f) => { labelMap[f.key] = f.label; });
+        rowsHtml = Object.entries(v).map(([k, val]) => {
+          if (/Data$/.test(k)) return '';
+          const label = labelMap[k] || k;
+          const dataKey = k + 'Data';
+          let inner = esc(val || '—');
+          if (val && v[dataKey]) inner = `<button class="link-btn" data-apply-file="${a.id}" data-fkey="${k}">${esc(val)}</button>`;
+          return `<div><span>${esc(label)}</span><strong>${inner}</strong></div>`;
+        }).join('');
+      }
+      const track = (a.track || []).map((t) => `<div class="perm-item"><span class="dot"></span><div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div></div>`).join('');
+      const isOwner = a.name === cur.name;
+      const approved = a.status === '已通过' && !!a.proofNo;
+      const canArchive = allPower() || ['presidium', 'minister', 'teacher'].includes(cur.role);
+      let actionHtml = '';
+      if (a.type === 'publicLeave') {
+        if (approved && isOwner) actionHtml += `<button class="primary-btn" id="plDownload">下载证明</button>`;
+        if (approved && canArchive) actionHtml += `<button class="primary-btn light" id="plArchive">导出证明存档</button>`;
+        if (approved && (isOwner || cur.role === 'admin')) actionHtml += `<button class="link-btn del" id="plVoid">作废申请</button>`;
+      }
+      openInfo(a.typeName + ' · ' + a.name, `<div class="info-list">${rowsHtml}</div>${a.certNo ? `<p class="form-hint">证明编号：${esc(a.certNo)}</p>` : ''}${a.proofNo ? `<p class="form-hint">证明编号：${esc(a.proofNo)}（审批通过后表单内容锁定，不可再编辑）</p>` : ''}${actionHtml ? `<div class="row-actions" style="margin-top:12px">${actionHtml}</div>` : ''}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${track || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>'}</div>`, '提交时间：' + a.date);
+      const dl = $('#plDownload'), ar = $('#plArchive'), vd = $('#plVoid');
+      if (dl) dl.onclick = () => plFormatPicker(a, false);
+      if (ar) ar.onclick = () => plFormatPicker(a, true);
+      if (vd) vd.onclick = () => {
+        if (!confirm('作废后该证明不可再下载，记录保留归档；信息有误需重新提交新申请。确定作废这条申请？')) return;
+        a.status = '已作废'; a.locked = true;
+        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '作废申请', note: '证明作废，归档保留', time: today() });
+        commit('作废公假证明', `${a.proofNo} · ${a.name}`); save(); closeModal(); render(); toast('申请已作废，记录归档');
+      };
+      document.querySelectorAll('[data-apply-file]').forEach((b) => {
+        b.onclick = () => {
+          const rec = db.applies.find((x) => x.id === b.dataset.applyFile);
+          if (!rec) return;
+          const dk = b.dataset.fkey + 'Data';
+          const url = (rec.values && rec.values[dk]) || '';
+          const name = (rec.values && rec.values[b.dataset.fkey]) || '附件';
+          if (!url) { toast('附件内容缺失'); return; }
+          try {
+            const arr = String(url).split(',');
+            const mime = (arr[0].match(/data:([^;]+)/) || [, 'application/octet-stream'])[1];
+            const bin = atob(arr[1] || '');
+            const buf = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i);
+            downloadBlob(new Blob([buf], { type: mime }), name);
+            commit('下载申请附件', `${rec.typeName} · ${rec.name}`);
+          } catch (e) { toast('附件解析失败'); }
+        };
+      });
+    };
+  });
+}
+
+/* 申请事宜汇总：按事项查看申请人与审批轨迹；部长团仅看本部门（秘书部除外），主席团/指导教师/管理员查看全部 */
+let summaryTypeFilter = '全部';
+function renderApplySummary() {
+  db.applies = db.applies || [];
+  const seeAll = allPower() || (cur.role === 'minister' && cur.dept === '秘书部');
+  const inScope = (a) => seeAll || (cur.role === 'minister' && a.dept === cur.dept);
+  const list = db.applies.filter(inScope);
+  const typeNames = ['全部', ...Array.from(new Set(list.map((a) => a.typeName)))];
+  if (!typeNames.includes(summaryTypeFilter)) summaryTypeFilter = '全部';
+  const shown = summaryTypeFilter === '全部' ? list : list.filter((a) => a.typeName === summaryTypeFilter);
+  const scopeText = seeAll ? '可查看全部部门申请' : `仅可查看本部门（${esc(cur.dept)}）申请`;
+  const optHtml = typeNames.map((t) => `<option ${t === summaryTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const rows = shown.slice().reverse().map((a) => {
+    const flow = applyStages(a).join(' → ');
+    return `<tr>
+      <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
+      <td><span class="badge blue">${esc(a.typeName)}</span></td>
+      <td>${esc(a.dept)}</td>
+      <td>${esc(a.title || '成员')}</td>
+      <td class="nowrap">${esc(a.date)}</td>
+      <td>${badge(a.status)}</td>
+      <td><div class="cell-sub">${esc(flow)}</div><div class="cell-sub">${esc(applyTrackHtml(a))}</div></td>
+      <td><div class="row-actions"><button class="link-btn" data-apply-view="${a.id}">查看</button></div></td>
+    </tr>`;
+  }).join('');
+  $('#views').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，按申请事项筛选，审批流程与轨迹全程留痕</div></div>
+        <div class="field" style="min-width:220px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>申请人</th><th>申请事项</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="8" class="empty">暂无申请记录</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+  const sel = $('#summaryType');
+  if (sel) sel.onchange = () => { summaryTypeFilter = sel.value; render(); };
+  bindApplyView();
+}
+
 function renderJoin() {
   db.applies = db.applies || [];
   const mine = db.applies.filter((a) => a.name === cur.name);
   const pending = db.applies.filter((a) => ['待审核', '审核中', '待分派', '处理中'].includes(a.status));
   const canReview = allPower() || cur.role === 'minister';
-  const reviewList = cur.role === 'minister' ? pending.filter((a) => a.dept === cur.dept) : pending;
+  const reviewList = cur.role === 'minister' ? pending.filter((a) => a.dept === cur.dept && !isMinisterApplicant(a)) : pending;
   const archiveView = allPower() || ['minister', 'presidium', 'teacher'].includes(cur.role);
   const archiveList = db.applies.filter((a) => a.type === 'publicLeave' && ['已通过', '已作废'].includes(a.status));
   const legacy = cur.role === 'minister' ? db.joinRequests.filter((j) => j.dept === cur.dept) : db.joinRequests;
@@ -390,7 +507,7 @@ function renderJoin() {
           commit('重新编辑申请', `${cfg.name} · ${cur.name}`);
         } else {
           db.applies.push({
-            id: uid('ap'), type: key, typeName: cfg.name, name: cur.name, sno: cur.sno || '—', major: cur.major || '—', class: cur.class || '—', dept: cur.dept, title: cur.title,
+            id: uid('ap'), type: key, typeName: cfg.name, name: cur.name, sno: cur.sno || '—', major: cur.major || '—', class: cur.class || '—', dept: cur.dept, title: cur.title, applicantRole: cur.role,
             values: d, date: today(), status: key === 'feedback' ? '待分派' : '待审核', stage: 0, locked: false,
             track: [{ actor: cur.name, role: ROLE_NAMES[cur.role], action: '提交申请', note: '', time: today() }]
           });
@@ -401,70 +518,7 @@ function renderJoin() {
     });
   }
 
-  document.querySelectorAll('[data-apply-view]').forEach((b) => {
-    b.onclick = () => {
-      const a = db.applies.find((x) => x.id === b.dataset.applyView);
-      const v = a.values || {};
-      const PL_LABELS = { activityName: '参加活动名称', period: '活动起止时间', place: '活动地点', courses: '请假课程及日期', explanation: '申请说明', phone: '联系电话', copiesPurpose: '申请份数与用途', attach: '活动通知或策划附件' };
-      let rowsHtml;
-      if (a.type === 'publicLeave') {
-        const auto = [['姓名', a.name], ['学号', a.sno], ['专业', a.major || '—'], ['班级', a.class || '—'], ['所属部门', a.dept]];
-        const manual = Object.entries(PL_LABELS).map(([k, label]) => [label, v[k] || '—']);
-        rowsHtml = auto.concat(manual).map(([label, val]) => `<div><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`).join('');
-      } else {
-        const cfg = APPLY_TYPES[a.type] || {};
-        const labelMap = {};
-        (cfg.fields || []).forEach((f) => { labelMap[f.key] = f.label; });
-        rowsHtml = Object.entries(v).map(([k, val]) => {
-          if (/Data$/.test(k)) return '';
-          const label = labelMap[k] || k;
-          const dataKey = k + 'Data';
-          let inner = esc(val || '—');
-          if (val && v[dataKey]) inner = `<button class="link-btn" data-apply-file="${a.id}" data-fkey="${k}">${esc(val)}</button>`;
-          return `<div><span>${esc(label)}</span><strong>${inner}</strong></div>`;
-        }).join('');
-      }
-      const track = (a.track || []).map((t) => `<div class="perm-item"><span class="dot"></span><div>${esc(t.time)} · ${esc(t.action)} · ${esc(t.actor)}（${esc(t.role)}）${t.note ? '：' + esc(t.note) : ''}</div></div>`).join('');
-      const isOwner = a.name === cur.name;
-      const approved = a.status === '已通过' && !!a.proofNo;
-      const canArchive = allPower() || ['presidium', 'minister', 'teacher'].includes(cur.role);
-      let actionHtml = '';
-      if (a.type === 'publicLeave') {
-        if (approved && isOwner) actionHtml += `<button class="primary-btn" id="plDownload">下载证明</button>`;
-        if (approved && canArchive) actionHtml += `<button class="primary-btn light" id="plArchive">导出证明存档</button>`;
-        if (approved && (isOwner || cur.role === 'admin')) actionHtml += `<button class="link-btn del" id="plVoid">作废申请</button>`;
-      }
-      openInfo(a.typeName + ' · ' + a.name, `<div class="info-list">${rowsHtml}</div>${a.certNo ? `<p class="form-hint">证明编号：${esc(a.certNo)}</p>` : ''}${a.proofNo ? `<p class="form-hint">证明编号：${esc(a.proofNo)}（审批通过后表单内容锁定，不可再编辑）</p>` : ''}${actionHtml ? `<div class="row-actions" style="margin-top:12px">${actionHtml}</div>` : ''}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${track || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>'}</div>`, '提交时间：' + a.date);
-      const dl = $('#plDownload'), ar = $('#plArchive'), vd = $('#plVoid');
-      if (dl) dl.onclick = () => plFormatPicker(a, false);
-      if (ar) ar.onclick = () => plFormatPicker(a, true);
-      if (vd) vd.onclick = () => {
-        if (!confirm('作废后该证明不可再下载，记录保留归档；信息有误需重新提交新申请。确定作废这条申请？')) return;
-        a.status = '已作废'; a.locked = true;
-        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '作废申请', note: '证明作废，归档保留', time: today() });
-        commit('作废公假证明', `${a.proofNo} · ${a.name}`); save(); closeModal(); render(); toast('申请已作废，记录归档');
-      };
-      document.querySelectorAll('[data-apply-file]').forEach((b) => {
-        b.onclick = () => {
-          const rec = db.applies.find((x) => x.id === b.dataset.applyFile);
-          if (!rec) return;
-          const dk = b.dataset.fkey + 'Data';
-          const url = (rec.values && rec.values[dk]) || '';
-          const name = (rec.values && rec.values[b.dataset.fkey]) || '附件';
-          if (!url) { toast('附件内容缺失'); return; }
-          try {
-            const arr = String(url).split(',');
-            const mime = (arr[0].match(/data:([^;]+)/) || [, 'application/octet-stream'])[1];
-            const bin = atob(arr[1] || '');
-            const buf = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i);
-            downloadBlob(new Blob([buf], { type: mime }), name);
-            commit('下载申请附件', `${rec.typeName} · ${rec.name}`);
-          } catch (e) { toast('附件解析失败'); }
-        };
-      });
-    };
-  });
+  bindApplyView();
   document.querySelectorAll('[data-apply-cancel]').forEach((b) => {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyCancel);
@@ -507,8 +561,9 @@ function renderJoin() {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyPass);
       const cfg = APPLY_TYPES[a.type];
-      const last = a.stage >= cfg.stages.length - 1;
-      const stageLabel = cfg.stages[a.stage] || '';
+      const stages = applyStages(a);
+      const last = a.stage >= stages.length - 1;
+      const stageLabel = stages[a.stage] || '';
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: '', time: today() });
       if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; }
