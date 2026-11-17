@@ -71,8 +71,15 @@
   }
 
   function pushLocal() {
-    const payload = { id: ROW_ID, data: cleanSnapshot(), updated_at: iso() };
     return readRemote().then(function (row) {
+      let snap = cleanSnapshot();
+      if (row && row.data) {
+        /* 先把云端已有流水并入本机快照，避免整份回写时冲掉他人刚提交、本机尚未拉取的申请/日志 */
+        const remote = normalize(JSON.parse(JSON.stringify(row.data)));
+        mergeBoth(remote, snap);
+        snap = remote;
+      }
+      const payload = { id: ROW_ID, data: snap, updated_at: iso() };
       return row ? writeRemote(payload) : createRemote(payload);
     }).then(function () {
       localStorage.removeItem(PENDING);
@@ -87,28 +94,44 @@
     });
   }
 
-  /* 流水类业务表：本地尚未推送上云的新增条目，重登时按唯一键并入云端快照，避免被旧快照覆盖丢失；
-     成员/账号/部门等主数据仍以云端为准，防止已删除项在本机复活。 */
+  /* 流水类业务表：按唯一键双向合并，任一端新增都不丢失；同一条目取审批轨迹更完整（较新）的一方。
+     成员/账号/部门/人事等主数据仍以云端为准，防止已删除项在本机复活。 */
   const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities'];
   function idOf(x) { return x.id || x.username || (x.name + '|' + x.date + '|' + (x.typeName || x.type || '')); }
-  function mergePending(remote) {
+  /* 比较两条同 id 记录哪条更新：审批/操作轨迹更长者为新，其次按时间字段 */
+  function newer(a, b) {
+    const ta = (a.track || []).length, tb = (b.track || []).length;
+    if (ta !== tb) return ta > tb ? a : b;
+    return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
+  }
+  /* 双向合并流水表到 remote（原地修改并返回）：并集 + 同 id 取较新；主数据字段不动 */
+  function mergeBoth(remote, local) {
     UNION_ARRAYS.forEach(function (k) {
       const rArr = Array.isArray(remote[k]) ? remote[k] : [];
-      const lArr = Array.isArray(db[k]) ? db[k] : [];
-      if (!lArr.length) return;
-      const rIds = new Set(rArr.map(idOf));
-      lArr.forEach(function (item) { if (!rIds.has(idOf(item))) rArr.push(item); });
-      remote[k] = rArr;
+      const lArr = Array.isArray(local[k]) ? local[k] : [];
+      if (!rArr.length && !lArr.length) return;
+      const map = new Map();
+      rArr.forEach(function (x) { map.set(idOf(x), x); });
+      lArr.forEach(function (x) {
+        const id = idOf(x);
+        map.set(id, map.has(id) ? newer(map.get(id), x) : x);
+      });
+      remote[k] = Array.from(map.values());
     });
+    return remote;
   }
 
-  /* 用云端数据覆盖本机（云端为准，删除才会真正生效）；合并本机未推送的流水新增 */
+  /* 用云端数据覆盖本机（云端为准，删除才会真正生效）；同时并入本机尚未上云的流水新增，
+     若确实并入了本机新增，则把合并结果回推云端落库，避免只留在本机、下次又被旧快照冲掉。 */
   function applyRemote(row) {
     const remote = normalize(JSON.parse(JSON.stringify(row.data)));
-    mergePending(remote);
+    const local = cleanSnapshot();
+    const before = JSON.stringify(remote);
+    mergeBoth(remote, local);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    if (JSON.stringify(remote) !== before) pushLocal();
   }
 
   function pullRemote() {
@@ -140,7 +163,7 @@
     try { db[FLAG] = iso(); } catch (e) { /* 忽略 */ }
     localStorage.setItem(PENDING, '1');
     clearTimeout(timer);
-    timer = setTimeout(pushLocal, 500);
+    timer = setTimeout(pushLocal, 300);
   };
 
   const loginBtn = document.getElementById('loginBtn');
@@ -152,6 +175,11 @@
   /* 页面关闭/刷新前尽力把暂存改动推上云端（卸载请求可能被浏览器中断，本地 localStorage 仍已落盘兜底） */
   window.addEventListener('beforeunload', function () {
     if (localStorage.getItem(PENDING) === '1') pushLocal();
+  });
+
+  /* 手机切后台/锁屏时页面常被直接回收，hidden 阶段再尽力推一次，避免提交后未上云即被挂起 */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && localStorage.getItem(PENDING) === '1') pushLocal();
   });
 
   /* 绝对兜底：云端再慢/再不可达，10 秒内一定放行登录，不再一直停在“正在连接云端” */
