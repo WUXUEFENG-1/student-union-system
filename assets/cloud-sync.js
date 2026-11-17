@@ -87,9 +87,25 @@
     });
   }
 
-  /* 用云端数据覆盖本机（云端为准，删除才会真正生效） */
+  /* 流水类业务表：本地尚未推送上云的新增条目，重登时按唯一键并入云端快照，避免被旧快照覆盖丢失；
+     成员/账号/部门等主数据仍以云端为准，防止已删除项在本机复活。 */
+  const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities'];
+  function idOf(x) { return x.id || x.username || (x.name + '|' + x.date + '|' + (x.typeName || x.type || '')); }
+  function mergePending(remote) {
+    UNION_ARRAYS.forEach(function (k) {
+      const rArr = Array.isArray(remote[k]) ? remote[k] : [];
+      const lArr = Array.isArray(db[k]) ? db[k] : [];
+      if (!lArr.length) return;
+      const rIds = new Set(rArr.map(idOf));
+      lArr.forEach(function (item) { if (!rIds.has(idOf(item))) rArr.push(item); });
+      remote[k] = rArr;
+    });
+  }
+
+  /* 用云端数据覆盖本机（云端为准，删除才会真正生效）；合并本机未推送的流水新增 */
   function applyRemote(row) {
     const remote = normalize(JSON.parse(JSON.stringify(row.data)));
+    mergePending(remote);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
@@ -129,6 +145,14 @@
 
   const loginBtn = document.getElementById('loginBtn');
   if (loginBtn) loginBtn.disabled = true;
+
+  /* 供退出登录等关键节点等待推送完成：返回是否成功上云 */
+  window.__flushSync = pushLocal;
+
+  /* 页面关闭/刷新前尽力把暂存改动推上云端（卸载请求可能被浏览器中断，本地 localStorage 仍已落盘兜底） */
+  window.addEventListener('beforeunload', function () {
+    if (localStorage.getItem(PENDING) === '1') pushLocal();
+  });
 
   /* 绝对兜底：云端再慢/再不可达，10 秒内一定放行登录，不再一直停在“正在连接云端” */
   setTimeout(markReady, 10000);
