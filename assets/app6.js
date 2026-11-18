@@ -536,19 +536,7 @@ function bindResignActions() {
     const a = (db.applies || []).find((x) => x.id === btn.dataset.applyReject);
     if (!a) return;
     if (!canApprove(a)) { btn.remove(); return; }
-    btn.onclick = () => {
-      openForm({
-        title: '驳回申请 · ' + a.name,
-        fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
-        onSubmit(d) {
-          a.status = '已驳回';
-          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
-          notifyReject(a, (applyStages(a)[a.stage || 0]) || '审批', d.note);
-          commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`);
-          save(); render(); toast('已驳回申请');
-        }
-      });
-    };
+    btn.onclick = () => openRejectForm(a);
   });
 }
 
