@@ -6,11 +6,52 @@
    2) 活动审批：部门（部长）申请 → 主席审核 → 流程结束；本人不可审批本人
    ================================================================ */
 
-/* ---------------- 一、通知公告正文排版 ---------------- */
-function fmtNoticeBody(text) {
+/* 图片等比压缩：最长边 1000px、JPEG 0.75，避免云端体积膨胀 */
+function ntCompressImage(file, cb) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1000;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(cv.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => cb('');
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(file);
+}
+
+/* 正文排版：首行缩进、序号分段、行距统一；支持 [图片N] 占位插图，未标注的图片附在末尾 */
+function fmtNoticeBody(text, images) {
+  const imgs = Array.isArray(images) ? images.filter((x) => x && x.data) : [];
+  const used = new Set();
+  const imgBlock = (idx) => {
+    const it = imgs[idx];
+    if (!it) return '';
+    used.add(idx);
+    return `<div class="nt-img"><img src="${it.data}" alt="${esc(it.name || ('图片' + (idx + 1)))}"></div>`;
+  };
+  const renderSeg = (cls, segText) => {
+    const parts = String(segText).split(/\[图片(\d+)\]/);
+    let out = '';
+    for (let i = 0; i < parts.length; i += 1) {
+      if (i % 2 === 0) {
+        const piece = parts[i].trim();
+        if (piece) out += `<p class="${cls}">${esc(piece)}</p>`;
+      } else {
+        out += imgBlock(parseInt(parts[i], 10) - 1);
+      }
+    }
+    return out;
+  };
+
   const raw = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
   let seg = raw;
-  /* 全文无换行但含中文一级序号时，按序号切段 */
   if (seg.indexOf('\n') === -1 && /[一二三四五六七八九十]+、/.test(seg)) {
     seg = seg.replace(/\s*([一二三四五六七八九十]+、)/g, '\n$1');
   }
@@ -25,13 +66,19 @@ function fmtNoticeBody(text) {
     else if (/^（[一二三四五六七八九十]+）/.test(t) || /^\([一二三四五六七八九十]+\)/.test(t)) cls = 'nt-h2';
     else if (/^\d+\s*[\.、]/.test(t)) cls = 'nt-num';
     first = false;
-    html.push(`<p class="${cls}">${esc(t)}</p>`);
+    html.push(renderSeg(cls, t));
   });
-  return html.join('') || `<p class="nt-p">${esc(raw)}</p>`;
+  let out = html.join('');
+  if (!out) out = renderSeg('nt-p', raw);
+  const rest = [];
+  imgs.forEach((it, i) => { if (!used.has(i)) rest.push(imgBlock(i)); });
+  return out + rest.join('');
 }
 
 /* ---------------- 二、通知发文审批（撰稿→一审一校→二审二校→三审三校） ---------------- */
 const NOTICE_TYPES = ['通知公告', '活动通知', '会议通知', '制度文件', '工作安排', '表彰公示', '招募公告', '提醒告知', '其他通知'];
+/* 新闻动态：与通知公告同一套发文流程与版式，仅类型选项不同 */
+const NEWS_TYPES = ['新闻动态', '系部动态', '活动快讯', '获奖喜讯', '工作简讯'];
 const NOTICE_PENDING = ['待副主席审核', '待主席审核'];
 
 function ntWriter(n) { return n.writer || n.publisherName || '—'; }
@@ -69,8 +116,10 @@ function ntStamp(signs, label, dept) {
 
 renderNotice = function () {
   const all = db.notices || [];
+  const isNews = (n) => !!(n && n.cat === 'news');
   const mine = all.filter((n) => ntPending(n) && (ntCanApprove(n) || ntIsSelf(n) || allPower()));
-  const list = all.filter((n) => n.status === '已发布').slice().reverse();
+  const newsList = all.filter((n) => n.status === '已发布' && isNews(n)).slice().reverse();
+  const list = all.filter((n) => n.status === '已发布' && !isNews(n)).slice().reverse();
 
   const item = (n) => {
     const pend = ntPending(n);
@@ -81,12 +130,12 @@ renderNotice = function () {
       ops.push(`<button class="link-btn del" data-nt-reject="${n.id}">驳回</button>`);
     }
     if ((ntIsSelf(n) || allPower()) && (pend || n.status === '已发布')) {
-      ops.push(`<button class="link-btn del" data-nt-withdraw="${n.id}">撤回通知</button>`);
+      ops.push(`<button class="link-btn del" data-nt-withdraw="${n.id}">撤回${isNews(n) ? '新闻' : '通知'}</button>`);
     }
     return `<div class="notice-item ${pend ? 'notice-pend' : ''}">
-      <h4><span class="badge blue">${esc(n.type || '通知公告')}</span>${esc(n.title)}
+      <h4><span class="badge ${isNews(n) ? 'green' : 'blue'}">${esc(n.type || (isNews(n) ? '新闻动态' : '通知公告'))}</span>${esc(n.title)}
         ${pend ? `<span class="badge amber">${esc(stage === '副主席审核' ? '待副主席审核' : '待主席审核')}</span>` : ''}</h4>
-      <div class="notice-body">${fmtNoticeBody(n.content)}</div>
+      <div class="notice-body">${fmtNoticeBody(n.content, n.images)}</div>
       ${n.attach ? `<div class="cell-sub" style="margin:6px 0">附件：<button class="link-btn" data-notice-file="${n.id}">${esc(n.attach)}</button></div>` : ''}
       ${n.reason ? `<div class="cell-sub" style="color:#c0392b">驳回原因：${esc(n.reason)}</div>` : ''}
       ${ntSignHtml(n)}
@@ -100,33 +149,49 @@ renderNotice = function () {
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>通知公告</h2><div class="sub">共 ${list.length} 条已发布公告；发文流程：部长申请 → 二审二校（副主席）→ 三审三校（主席）</div></div>
-        ${isPublisher() ? '<button class="primary-btn" id="addNotice">+ 发布通知</button>' : ''}
+        <div><h2>通知公告 · 新闻动态</h2><div class="sub">共 ${list.length + newsList.length} 条已发布（新闻 ${newsList.length} 条 · 通知 ${list.length} 条）；发文流程：部长申请 → 二审二校（副主席）→ 三审三校（主席）</div></div>
+        <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap">
+          ${isPublisher() ? '<button class="primary-btn light" id="addNews">+ 发布新闻动态</button>' : ''}
+          ${isPublisher() ? '<button class="primary-btn" id="addNotice">+ 发布通知</button>' : ''}
+        </div>
       </div>
       ${mine.length ? `<div class="notice-block-title">待审核 / 我提交的（${mine.length}）</div>
       <div class="notice-list">${mine.map(item).join('')}</div>` : ''}
+      <div class="notice-block-title">新闻动态（${newsList.length}）</div>
+      <div class="notice-list">${newsList.map(item).join('') || '<div class="empty">暂无新闻动态</div>'}</div>
       <div class="notice-block-title">已发布公告</div>
       <div class="notice-list">${list.map(item).join('') || '<div class="empty">暂无通知</div>'}</div>
     </div>`;
 
-  if ($('#addNotice')) $('#addNotice').onclick = () => {
+  /* 通知与新闻共用同一套表单：类型不同、流程与版式完全一致 */
+  const openSendForm = (kind) => {
+    const isNewsKind = kind === 'news';
+    const types = isNewsKind ? NEWS_TYPES : NOTICE_TYPES;
     let attach = { name: '', data: '' };
+    let images = [];
     const body = openForm({
-      title: '发布通知',
-      hint: '部长提交后经副主席二审二校、主席三审三校后发布；主席提交直接发布。正文可直接换行分段，一、二、三等序号自动分段缩进。',
+      title: isNewsKind ? '发布新闻动态' : '发布通知',
+      hint: isNewsKind
+        ? '与通知公告同一套发文流程：部长提交 → 二审二校（副主席）→ 三审三校（主席）；主席 / 管理员提交直接发布。正文可换行分段，一、二、三等序号自动分段缩进；可插入图片并用 [图片1] 定位。'
+        : '部长提交后经副主席二审二校、主席三审三校后发布；主席提交直接发布。正文可直接换行分段，一、二、三等序号自动分段缩进；可插入图片并用 [图片1] 定位。',
       fields: [
-        { key: 'type', label: '通知类型', type: 'select', options: NOTICE_TYPES },
+        { key: 'type', label: isNewsKind ? '新闻类型' : '通知类型', type: 'select', options: types },
         { key: 'scope', label: '生效范围', type: 'select', options: ['全员', '指定部门', '部长团', '主席团'] },
-        { key: 'title', label: '通知标题', required: true },
+        { key: 'title', label: isNewsKind ? '新闻标题' : '通知标题', required: true },
         { key: 'writer', label: '撰稿人', required: true },
-        { key: 'content', label: '通知内容', type: 'textarea', required: true }
+        { key: 'content', label: isNewsKind ? '新闻内容' : '通知内容', type: 'textarea', required: true }
       ],
-      values: { type: NOTICE_TYPES[0], scope: '全员', writer: cur.name },
-      extra: '<div class="field"><label>附件（可选，≤800KB，支持文档 / 表格 / 图片，发布后可在通知中下载）</label><input type="file" id="nAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>',
+      values: { type: types[0], scope: '全员', writer: cur.name },
+      extra: '<div class="field"><label>插入图片（可选，最多 5 张，自动压缩；正文中用 [图片1] 定位，未标注的图片附在末尾）</label>'
+        + '<input type="file" id="nImgs" accept=".png,.jpg,.jpeg" multiple class="file-input">'
+        + '<div class="form-hint" id="nImgsHint">尚未选择图片</div></div>'
+        + '<div class="field"><label>附件（可选，≤800KB，支持文档 / 表格 / 图片，发布后可下载）</label>'
+        + '<input type="file" id="nAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>',
       onSubmit(d) {
         const n = {
-          id: uid('n'), type: d.type, scope: d.scope, title: d.title, writer: d.writer,
-          content: d.content, attach: attach.name, attachData: attach.data,
+          id: uid('n'), cat: isNewsKind ? 'news' : 'notice', type: d.type, scope: d.scope,
+          title: d.title, writer: d.writer, content: d.content,
+          attach: attach.name, attachData: attach.data, images: images.slice(),
           date: today(), publisherName: cur.name, publisher: ROLE_NAMES[cur.role],
           check1: null, check2: null, check3: null, reason: '', flow: [], stage: 0, track: []
         };
@@ -144,10 +209,13 @@ renderNotice = function () {
           n.check1 = { name: cur.name, dept: cur.dept || '', role: '一审一校', date: today() };
         }
         db.notices.push(n);
-        commit('发布通知', d.title); render();
-        toast(n.status === '已发布' ? '通知已发布' : '通知已提交，等待二审二校审核');
+        commit(isNewsKind ? '发布新闻动态' : '发布通知', d.title); render();
+        toast(n.status === '已发布'
+          ? (isNewsKind ? '新闻动态已发布' : '通知已发布')
+          : '已提交，等待二审二校审核');
       }
     });
+
     body.querySelector('#nAttach').onchange = (e) => {
       const f = e.target.files[0];
       attach = { name: '', data: '' };
@@ -158,7 +226,30 @@ renderNotice = function () {
       rd.onload = () => { attach.data = rd.result; };
       rd.readAsDataURL(f);
     };
+
+    body.querySelector('#nImgs').onchange = async (e) => {
+      const files = Array.from(e.target.files || []).slice(0, 5);
+      const hint = body.querySelector('#nImgsHint');
+      images = [];
+      const ok = [];
+      for (const f of files) {
+        if (f.size > 3 * 1024 * 1024) { toast(`${f.name} 超过 3MB，已跳过`); continue; }
+        const data = await new Promise((res) => ntCompressImage(f, res));
+        if (data) { images.push({ name: f.name, data }); ok.push(f.name); }
+      }
+      if (!images.length) { if (hint) hint.textContent = '尚未选择图片'; return; }
+      const ta = body.querySelector('#f_content');
+      const markers = images.map((x, i) => `[图片${i + 1}]`).join('\n');
+      if (ta && !/\[图片1\]/.test(ta.value)) {
+        ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n' : '') + markers;
+      }
+      if (hint) hint.textContent = `已插入 ${images.length} 张：${ok.join('、')}（可在正文中移动 [图片N] 调整位置）`;
+      toast(`已插入 ${images.length} 张图片`);
+    };
   };
+
+  if ($('#addNotice')) $('#addNotice').onclick = () => openSendForm('notice');
+  if ($('#addNews')) $('#addNews').onclick = () => openSendForm('news');
 
   document.querySelectorAll('[data-nt-pass]').forEach((b) => {
     b.onclick = () => {
