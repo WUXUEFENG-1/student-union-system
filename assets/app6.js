@@ -88,6 +88,19 @@ function isSelf(a) {
   return a.name === cur.name && (!a.dept || !cur.dept || a.dept === cur.dept);
 }
 
+/* 通用类型：按 applyStages 实际节点岗位判定，兼容部长/副部长申请人的「副主席→主席」链 */
+function _canApproveByNode(a) {
+  const nodes = (typeof applyStages === 'function') ? applyStages(a) : (Array.isArray(a.flow) && a.flow.length ? a.flow : []);
+  const node = nodes[a.stage] || '';
+  const t = cur.title || '';
+  if (/副主席/.test(node)) return cur.role === 'presidium' && t === '副主席';
+  if (/主席审核|主席复核|主席$/.test(node) && !/主席团/.test(node)) return cur.role === 'presidium' && t === '主席';
+  if (/主席|主席团/.test(node)) return cur.role === 'presidium';
+  if (/责任教师|责任老师/.test(node)) return cur.role === 'teacher';
+  if (/部长|副部长|负责人|初审/.test(node)) return cur.role === 'minister' && cur.dept === a.dept;
+  return _canApprove6(a);
+}
+
 /* ---------- 1) 审批权限：按动态节点岗位严格限定，不可跨级代审 ---------- */
 const _canApprove6 = canApprove;
 canApprove = function (a) {
@@ -123,7 +136,7 @@ canApprove = function (a) {
     if (cur.role === 'presidium') return a.stage === 1;
     return false;
   }
-  return _canApprove6(a);
+  return _canApproveByNode(a);
 };
 
 /* ---------- 1b) 工作台待办计数：只统计当前岗位真正可审批的申请，与待我审批列表口径一致 ---------- */
