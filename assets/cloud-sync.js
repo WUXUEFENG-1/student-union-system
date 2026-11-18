@@ -70,6 +70,16 @@
     if (btn) btn.disabled = false;
   }
 
+  /* 墓碑按数组并集合并：浅拷贝 Object.assign 会让云端旧数组整段覆盖本机新增墓碑，
+     导致刚删除的记录下一次合并又被并回（删除复活）。 */
+  function mergeGone(a, b) {
+    const out = Object.assign({}, a || {});
+    Object.keys(b || {}).forEach(function (k) {
+      out[k] = Array.from(new Set([...(out[k] || []), ...((b || {})[k] || [])]));
+    });
+    return out;
+  }
+
   function pushLocal() {
     return readRemote().then(function (row) {
       /* 以本机快照为底稿推送：成员/账号/部门等主数据的增删改都以本机为准，
@@ -78,7 +88,7 @@
       if (row && row.data) {
         const remote = normalize(JSON.parse(JSON.stringify(row.data)));
         /* 只把云端的流水记录并入本机，避免冲掉他人刚提交、本机尚未拉取的申请/日志 */
-        const gone = Object.assign({}, snap.__removed || {}, remote.__removed || {});
+        const gone = mergeGone(snap.__removed, remote.__removed);
         mergeUnionsInto(snap, remote, gone);
         snap.__removed = gone;
       }
@@ -140,7 +150,7 @@
     const before = JSON.stringify(remote);
     mergeBoth(remote, local);
     /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
-    remote.__removed = Object.assign({}, local.__removed || {}, remote.__removed || {});
+    remote.__removed = mergeGone(local.__removed, remote.__removed);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     localStorage.setItem(STORE_KEY, JSON.stringify(db));
