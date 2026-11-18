@@ -589,6 +589,7 @@ render = function () {
   rebindApprovePass();
   rebindApplyView();
   bindResignExport();
+  bindVolunteerExport();
   bindResignActions();
   filterResignTodo();
 };

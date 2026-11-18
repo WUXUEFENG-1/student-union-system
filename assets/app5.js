@@ -306,13 +306,14 @@ function openApplyInfo(a) {
   const trackHtml = (a.track || []).map((t) =>
     `<div class="perm-item"><span class="dot"></span><div>${esc(t.actor)} · ${esc(t.action)}${t.note ? '（' + esc(t.note) + '）' : ''} · ${esc(t.time)}</div></div>`).join('')
     || '<div class="perm-item"><span class="dot"></span>暂无轨迹</div>';
-  const extra = (a.type === 'election' && a.status === '已通过')
+  const showExport = (a.type === 'election' && a.status === '已通过') || a.type === 'volunteer';
+  const extra = showExport
     ? `<div class="row-actions" style="margin-top:12px"><button class="primary-btn light" id="elExportBtn">导出申请表</button></div>` : '';
   openInfo(a.typeName + ' · ' + a.name,
     `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${trackHtml}</div>`,
     '提交时间：' + a.date);
   const btn = document.getElementById('elExportBtn');
-  if (btn) btn.onclick = () => electionExportPicker(a);
+  if (btn) btn.onclick = () => (a.type === 'volunteer' ? volunteerExportPicker(a) : electionExportPicker(a));
   document.querySelectorAll('[data-apply-file]').forEach((b) => {
     b.onclick = () => {
       const rec = (db.applies || []).find((x) => x.id === b.dataset.applyFile);
@@ -737,3 +738,208 @@ openInfo = function (title, html, foot) {
     }
   }
 };
+
+/* ================= 志愿服务认定申请表导出：对齐《志愿服务认定申请表》版式 ================= */
+
+function volStageSign(a, stage) {
+  return stage === 0 ? (a.signMinister || '') : (a.signChair || '');
+}
+function volStageOpinion(a, stage) {
+  const s = (a.approveSigns || [])[stage];
+  return (s && s.opinion) || '';
+}
+function volStageDate(a, stage) {
+  const s = (a.approveSigns || [])[stage] || {};
+  return cnDate(s.time || a.approvedAt || a.date);
+}
+
+function buildVolunteerDocx(a) {
+  const v = a.values || {};
+  const p = personOf(a);
+  const media = [];
+  const addMedia = (url) => {
+    if (!url) return '';
+    const rid = 'rId' + (media.length + 1);
+    const ext = /png/i.test(url) ? 'png' : 'jpeg';
+    media.push({ rid, name: 'word/media/image' + media.length + '.' + ext, bytes: dataUrlBytes(url) });
+    return rid;
+  };
+  const escXml = (s) => esc(s);
+  const run = (text, o) => `<w:r><w:rPr><w:rFonts w:hint="eastAsia" w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="仿宋"/>${(o && o.bold) ? '<w:b/>' : ''}<w:sz w:val="${(o && o.size) || 32}"/></w:rPr><w:t xml:space="preserve">${escXml(text)}</w:t></w:r>`;
+  const imgRun = (rid, w, h) => `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="${media.length + 1}" name="img${media.length + 1}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="img"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"/></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+  const cell = (content, opts) => {
+    opts = opts || {};
+    const span = opts.span || 1;
+    let pr = `<w:tcPr><w:tcW w:w="2230" w:type="dxa"/>`;
+    if (span > 1) pr += `<w:gridSpan w:val="${span}"/>`;
+    pr += '</w:tcPr>';
+    return `<w:tc>${pr}<w:p>${content || ''}</w:p></w:tc>`;
+  };
+  const row = (inner, height) => `<w:tr>${height ? `<w:trPr><w:trHeight w:val="${height}"/></w:trPr>` : ''}${inner}</w:tr>`;
+
+  const sigR0 = addMedia(volStageSign(a, 0));
+  const sigR1 = addMedia(volStageSign(a, 1));
+  const sigImg = (rid) => rid ? imgRun(rid, 720000, 360000) : '____________';
+
+  const isImg = (u) => /^data:image\//.test(u || '');
+  const proofRid = isImg(v.proofData) ? addMedia(v.proofData) : '';
+
+  const briefLines = String(v.brief || '').split(/\r?\n/).filter((x) => x.trim());
+  const briefRuns = briefLines.map((ln, i) => (i ? '<w:r><w:br/></w:r>' : '') + run(ln)).join('') || run('—');
+  const proofParts = [];
+  if (v.proof) proofParts.push(run('附件：' + v.proof));
+  if (proofRid) proofParts.push(imgRun(proofRid, 2600000, 1300000));
+  const proofContent = proofParts.join('<w:r><w:br/></w:r>') || run('—');
+
+  const approveCell = (stage) => {
+    const opinion = volStageOpinion(a, stage) || '—';
+    const rid = stage === 0 ? sigR0 : sigR1;
+    const date = volStageDate(a, stage);
+    return run('意见：' + opinion)
+      + '<w:r><w:br/></w:r>'
+      + run('签字：') + sigImg(rid)
+      + run('　　日期：' + date);
+  };
+
+  const rows = [
+    row(`${cell(run('姓名'))}${cell(run(a.name || '—'))}${cell(run('学号'))}${cell(run(a.sno || '—'))}`),
+    row(`${cell(run('性别'))}${cell(run(p.gender || '—'))}${cell(run('班级'))}${cell(run(a.class || '—'))}`),
+    row(`${cell(run('民族'))}${cell(run(p.ethnicity || '—'))}${cell(run('政治面貌'))}${cell(run(p.politics || '—'))}`),
+    row(`${cell(run('联系方式'))}${cell(run(p.phone || '—'), { span: 3 })}`),
+    row(`${cell(run('志愿活动名称'))}${cell(run(v.activity || '—'), { span: 3 })}`),
+    row(`${cell(run('主办单位'))}${cell(run(v.organizer || '—'), { span: 3 })}`),
+    row(`${cell(run('起止时间'))}${cell(run(v.period || '—'), { span: 3 })}`),
+    row(`${cell(run('总服务时长'))}${cell(run(v.hours ? v.hours + ' 小时' : '—'), { span: 3 })}`),
+    row(`${cell(run('活动简介'))}${cell(briefRuns, { span: 3 })}`, 1497),
+    row(`${cell(run('证明材料（证书/签到表/截图）'))}${cell(proofContent, { span: 3 })}`, 2041),
+    row(`${cell(run('部长初审'))}${cell(approveCell(0), { span: 3 })}`, 1532),
+    row(`${cell(run('主席团复核意见'))}${cell(approveCell(1), { span: 3 })}`, 1373)
+  ].join('');
+
+  const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
+    .map((b) => `<w:${b} w:val="single" w:sz="4" w:space="0" w:color="333333"/>`).join('');
+
+  const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:body>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:hint="eastAsia" w:ascii="宋体" w:hAnsi="宋体" w:eastAsia="宋体"/><w:sz w:val="44"/></w:rPr><w:t>应用经济系学生会志愿服务认定申请表</w:t></w:r></w:p>
+<w:tbl><w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:jc w:val="center"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>
+<w:tblGrid><w:gridCol w:w="2230"/><w:gridCol w:w="2306"/><w:gridCol w:w="1928"/><w:gridCol w:w="2608"/></w:tblGrid>
+${rows}
+</w:tbl>
+</w:body></w:document>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${media.map((m) => `<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${m.name.replace(/^word\//, '')}"/>`).join('')}
+</Relationships>`;
+
+  const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  const enc = new TextEncoder();
+  const files = [
+    { name: '[Content_Types].xml', data: enc.encode(ct) },
+    { name: '_rels/.rels', data: enc.encode(rootRels) },
+    { name: 'word/document.xml', data: enc.encode(docXml) },
+    { name: 'word/_rels/document.xml.rels', data: enc.encode(rels) }
+  ];
+  media.forEach((m) => files.push({ name: m.name, data: m.bytes }));
+  return buildZip(files);
+}
+
+function volunteerPrintHtml(a) {
+  const v = a.values || {};
+  const p = personOf(a);
+  const sig = (stage) => volStageSign(a, stage) ? `<img src="${volStageSign(a, stage)}" style="height:30px;vertical-align:middle">` : '____________';
+  const cell = (t) => `<td>${esc(t || '—')}</td>`;
+  const lab = (t) => `<td class="lab">${esc(t)}</td>`;
+  const wide = (t) => `<td colspan="3">${t}</td>`;
+  const proof = [];
+  if (v.proof) proof.push(esc(v.proof));
+  if (isImgUrl(v.proofData)) proof.push(`<img src="${v.proofData}" style="max-width:240px">`);
+  const approveRow = (label, stage) => `<tr>${lab(label)}${wide('意见：' + esc(volStageOpinion(a, stage) || '—') + '<br>签字：' + sig(stage) + '　　日期：' + volStageDate(a, stage))}</tr>`;
+  const rows = [
+    `<tr>${lab('姓名')}${cell(a.name)}${lab('学号')}${cell(a.sno)}</tr>`,
+    `<tr>${lab('性别')}${cell(p.gender)}${lab('班级')}${cell(a.class)}</tr>`,
+    `<tr>${lab('民族')}${cell(p.ethnicity)}${lab('政治面貌')}${cell(p.politics)}</tr>`,
+    `<tr>${lab('联系方式')}${wide(esc(p.phone || '—'))}</tr>`,
+    `<tr>${lab('志愿活动名称')}${wide(esc(v.activity || '—'))}</tr>`,
+    `<tr>${lab('主办单位')}${wide(esc(v.organizer || '—'))}</tr>`,
+    `<tr>${lab('起止时间')}${wide(esc(v.period || '—'))}</tr>`,
+    `<tr>${lab('总服务时长')}${wide(esc(v.hours ? v.hours + ' 小时' : '—'))}</tr>`,
+    `<tr>${lab('活动简介')}${wide(esc(v.brief || '—'))}</tr>`,
+    `<tr>${lab('证明材料（证书/签到表/截图）')}${wide(proof.join('<br>') || '—')}</tr>`,
+    approveRow('部长初审', 0),
+    approveRow('主席团复核意见', 1)
+  ].join('');
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>志愿服务认定申请表_${esc(a.name)}</title>
+  <style>@page{size:A4;margin:2cm}body{font-family:'FangSong','仿宋',serif;padding:16px}h2{text-align:center;font-size:18px}table{border-collapse:collapse;width:100%;font-size:13px}td{border:1px solid #333;padding:6px 8px;vertical-align:middle}td.lab{background:#f2f5fa;font-weight:600;width:120px;text-align:center}img{height:30px;vertical-align:middle}</style></head>
+  <body><h2>应用经济系学生会志愿服务认定申请表</h2>
+  <table>${rows}</table></body></html>`;
+}
+
+function isImgUrl(u) { return /^data:image\//.test(u || ''); }
+
+function volunteerExportPicker(a) {
+  $('#modalTitle').textContent = '导出：' + a.typeName;
+  $('#modalOk').classList.add('hidden');
+  $('#modalCancel').textContent = '关闭';
+  modalSubmit = null;
+  $('#modalBody').innerHTML = `<p class="form-hint">选择导出格式，审批签字与证明材料将一并写入文件。</p>
+    <div class="export-grid">
+      <button class="primary-btn" id="elWord">导出 Word（.docx）</button>
+      <button class="primary-btn light" id="elPdf">导出 PDF（打印另存）</button>
+    </div>`;
+  $('#modalMask').classList.remove('hidden');
+  $('#elWord').onclick = () => {
+    downloadBlob(buildVolunteerDocx(a), `志愿服务认定申请表_${a.name}_${a.sno}.docx`);
+    commit('导出志愿服务认定申请表', `${a.typeName} · ${a.name}`);
+    closeModal();
+    toast('已导出 Word 文档');
+  };
+  $('#elPdf').onclick = () => {
+    const w = window.open('', '_blank');
+    if (!w) { toast('请允许浏览器弹出窗口后再导出 PDF'); return; }
+    w.document.write(volunteerPrintHtml(a));
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
+    commit('导出志愿服务认定申请表 PDF', `${a.typeName} · ${a.name}`);
+  };
+}
+
+/* 列表行：志愿服务认定申请挂导出按钮 */
+function bindVolunteerExport() {
+  document.querySelectorAll('[data-apply-view]').forEach((btn) => {
+    const a = db.applies.find((x) => x.id === btn.dataset.applyView);
+    if (!a || a.type !== 'volunteer') return;
+    const holder = btn.closest('.row-actions') || btn.parentElement;
+    if (!holder) return;
+    if (!holder.querySelector(`[data-vol-export="${a.id}"]`)) {
+      const eb = document.createElement('button');
+      eb.className = 'link-btn';
+      eb.dataset.volExport = a.id;
+      eb.textContent = '导出';
+      holder.appendChild(eb);
+    }
+  });
+  document.querySelectorAll('[data-vol-export]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const a = db.applies.find((x) => x.id === b.dataset.volExport);
+      if (a) volunteerExportPicker(a);
+    };
+  });
+}
