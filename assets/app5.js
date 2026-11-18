@@ -309,8 +309,9 @@ function openApplyInfo(a) {
   const showExport = (a.type === 'election' && a.status === '已通过') || a.type === 'volunteer';
   const extra = showExport
     ? `<div class="row-actions" style="margin-top:12px"><button class="primary-btn light" id="elExportBtn">导出申请表</button></div>` : '';
+  const noHint = a.volNo ? `<p class="form-hint">认定编号：${esc(a.volNo)}</p>` : '';
   openInfo(a.typeName + ' · ' + a.name,
-    `<div class="info-list">${rows}</div>${extra}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${trackHtml}</div>`,
+    `<div class="info-list">${rows}</div>${noHint}${extra}<div class="form-hint" style="margin-top:10px">审批流转（可视化）</div>${flowTimelineHtml(a)}<div class="form-hint" style="margin-top:10px">操作记录</div><div class="perm-list">${trackHtml}</div>`,
     '提交时间：' + a.date);
   const btn = document.getElementById('elExportBtn');
   if (btn) btn.onclick = () => (a.type === 'volunteer' ? volunteerExportPicker(a) : electionExportPicker(a));
@@ -744,6 +745,12 @@ openInfo = function (title, html, foot) {
 function volStageSign(a, stage) {
   return stage === 0 ? (a.signMinister || '') : (a.signChair || '');
 }
+function ensureVolNo(a) {
+  if (a.volNo) return a.volNo;
+  const seq = String(db.applies.filter((x) => x.type === 'volunteer' && x.volNo).length + 1).padStart(3, '0');
+  a.volNo = 'ZY' + today().replace(/-/g, '') + seq;
+  return a.volNo;
+}
 function volStageOpinion(a, stage) {
   const s = (a.approveSigns || [])[stage];
   return (s && s.opinion) || '';
@@ -819,10 +826,13 @@ function buildVolunteerDocx(a) {
   const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
     .map((b) => `<w:${b} w:val="single" w:sz="4" w:space="0" w:color="333333"/>`).join('');
 
+  const noLine = a.volNo ? `<w:p><w:pPr><w:jc w:val="right"/></w:pPr>${run('编号：' + a.volNo, { size: 24 })}</w:p>` : '';
+
   const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
 <w:body>
 <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:hint="eastAsia" w:ascii="宋体" w:hAnsi="宋体" w:eastAsia="宋体"/><w:sz w:val="44"/></w:rPr><w:t>应用经济系学生会志愿服务认定申请表</w:t></w:r></w:p>
+${noLine}
 <w:tbl><w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:jc w:val="center"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>
 <w:tblGrid><w:gridCol w:w="2230"/><w:gridCol w:w="2306"/><w:gridCol w:w="1928"/><w:gridCol w:w="2608"/></w:tblGrid>
 ${rows}
@@ -884,28 +894,32 @@ function volunteerPrintHtml(a) {
     approveRow('部长初审', 0),
     approveRow('主席团复核意见', 1)
   ].join('');
+  const noHtml = a.volNo ? `<p style="text-align:right;margin:0 0 8px">编号：${esc(a.volNo)}</p>` : '';
   return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>志愿服务认定申请表_${esc(a.name)}</title>
   <style>@page{size:A4;margin:2cm}body{font-family:'FangSong','仿宋',serif;padding:16px}h2{text-align:center;font-size:18px}table{border-collapse:collapse;width:100%;font-size:13px}td{border:1px solid #333;padding:6px 8px;vertical-align:middle}td.lab{background:#f2f5fa;font-weight:600;width:120px;text-align:center}img{height:30px;vertical-align:middle}</style></head>
   <body><h2>应用经济系学生会志愿服务认定申请表</h2>
+  ${noHtml}
   <table>${rows}</table></body></html>`;
 }
 
 function isImgUrl(u) { return /^data:image\//.test(u || ''); }
 
 function volunteerExportPicker(a) {
+  if (a.status === '已通过' && !a.volNo) { ensureVolNo(a); save(); }
+  const noText = a.volNo ? `编号：${esc(a.volNo)}　｜　` : '';
   $('#modalTitle').textContent = '导出：' + a.typeName;
   $('#modalOk').classList.add('hidden');
   $('#modalCancel').textContent = '关闭';
   modalSubmit = null;
-  $('#modalBody').innerHTML = `<p class="form-hint">选择导出格式，审批签字与证明材料将一并写入文件。</p>
+  $('#modalBody').innerHTML = `<p class="form-hint">${noText}选择导出格式，审批签字与证明材料将一并写入文件。</p>
     <div class="export-grid">
       <button class="primary-btn" id="elWord">导出 Word（.docx）</button>
       <button class="primary-btn light" id="elPdf">导出 PDF（打印另存）</button>
     </div>`;
   $('#modalMask').classList.remove('hidden');
   $('#elWord').onclick = () => {
-    downloadBlob(buildVolunteerDocx(a), `志愿服务认定申请表_${a.name}_${a.sno}.docx`);
-    commit('导出志愿服务认定申请表', `${a.typeName} · ${a.name}`);
+    downloadBlob(buildVolunteerDocx(a), `志愿服务认定申请表_${a.volNo || '编号'}_${a.name}_${a.sno}.docx`);
+    commit('导出志愿服务认定申请表', `${a.volNo || '—'} · ${a.typeName} · ${a.name}`);
     closeModal();
     toast('已导出 Word 文档');
   };

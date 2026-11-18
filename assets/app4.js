@@ -176,6 +176,13 @@ function applyApproved(a) {
   }
   if (a.type === 'leaveclub' && mem) { mem.status = '已退会'; if (acc && acc.role !== 'admin' && acc.role !== 'teacher') acc.role = 'student'; }
   if (a.type === 'volunteer' && mem) { mem.volunteerHours = (Number(mem.volunteerHours) || 0) + Number(a.values.hours || 0); }
+  if (a.type === 'volunteer') {
+    if (!a.volNo) {
+      const seq = String(db.applies.filter((x) => x.type === 'volunteer' && x.volNo).length + 1).padStart(3, '0');
+      a.volNo = 'ZY' + today().replace(/-/g, '') + seq;
+    }
+    a.approvedAt = today();
+  }
   if (a.type === 'cert') { a.certNo = 'RZ' + String(Date.now()).slice(-8); }
   if (a.type === 'publicLeave') {
     const seq = String(db.applies.filter((x) => x.type === 'publicLeave' && x.proofNo).length + 1).padStart(3, '0');
