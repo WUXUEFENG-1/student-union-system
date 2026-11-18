@@ -147,6 +147,7 @@ function tone(status) {
   if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
   if (['待审核', '待审批', '待责任教师审核', '待主席团审核', '待教师审核', '待主席审核', '待副主席审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
   if (['已驳回', '已罢免', '离任', '已截止', '已退会', '已撤回', '已撤销', '已作废'].includes(status)) return 'red';
+  if (status === '草稿') return 'gray';
   return 'gray';
 }
 function badge(text) { return `<span class="badge ${tone(text)}">${esc(text)}</span>`; }
@@ -288,7 +289,11 @@ function openForm({ title, fields = [], values = {}, okText = '保存', hint = '
     const req = f.required ? ' required' : '';
     const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : '';
     if (f.type === 'select') {
-      const opts = f.options.map((o) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('');
+      const opts = f.options.map((o) => {
+        const val = (typeof o === 'object' && o !== null) ? o.value : o;
+        const lab = (typeof o === 'object' && o !== null) ? o.label : o;
+        return `<option value="${esc(val)}"${val === v ? ' selected' : ''}>${esc(lab)}</option>`;
+      }).join('');
       return `<div class="field"><label>${esc(f.label)}</label><select id="f_${f.key}"${req}>${opts}</select></div>`;
     }
     if (f.type === 'textarea') {
