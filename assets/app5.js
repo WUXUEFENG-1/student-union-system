@@ -211,7 +211,8 @@ function canApprove(a) {
 
 function openApproveForm(a) {
   const cfg = APPLY_TYPES[a.type];
-  const stageLabel = cfg.stages[a.stage] || '';
+  const stages = (typeof applyStages === 'function') ? applyStages(a) : (cfg.stages || []);
+  const stageLabel = stages[a.stage] || '';
   let signFile = '';
   let canvasDirty = false;
   const needPhone = a.type === 'publicLeave';
@@ -240,12 +241,12 @@ function openApproveForm(a) {
       signs.push({ sign: signData, phone: d.phone, opinion: d.opinion || '', actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel, time: today() });
       if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = d.phone; }
       else { a.signChair = signData; a.phoneChair = d.phone; }
-      const last = a.stage >= cfg.stages.length - 1;
+      const last = a.stage >= stages.length - 1;
       const trackNote = (needPhone ? '电话：' + d.phone : '') + (d.opinion ? (needPhone ? '；' : '') + '意见：' + d.opinion : '');
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: trackNote, time: today() });
       if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; }
-      notifyStagePass(a, stageLabel, last ? '' : (cfg.stages[a.stage] || ''));
+      notifyStagePass(a, stageLabel, last ? '' : (stages[a.stage] || ''));
       commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
       save(); render();
       toast(last ? '申请已通过' : '已流转至下一审批节点');
