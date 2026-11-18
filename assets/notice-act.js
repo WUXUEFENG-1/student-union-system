@@ -182,10 +182,10 @@ renderNotice = function () {
         { key: 'content', label: isNewsKind ? '新闻内容' : '通知内容', type: 'textarea', required: true }
       ],
       values: { type: types[0], scope: '全员', writer: cur.name },
-      extra: '<div class="field"><label>插入图片（可选，最多 5 张，自动压缩；正文中用 [图片1] 定位，未标注的图片附在末尾）</label>'
+      extra: '<div class="field"><label>插入图片（可选，不限张数，自动压缩；正文中用 [图片1] 定位，未标注的图片附在末尾）</label>'
         + '<input type="file" id="nImgs" accept=".png,.jpg,.jpeg" multiple class="file-input">'
         + '<div class="form-hint" id="nImgsHint">尚未选择图片</div></div>'
-        + '<div class="field"><label>附件（可选，≤800KB，支持文档 / 表格 / 图片，发布后可下载）</label>'
+        + '<div class="field"><label>附件（可选，支持文档 / 表格 / 图片，发布后可下载）</label>'
         + '<input type="file" id="nAttach" accept=".doc,.docx,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.txt" class="file-input"></div>',
       onSubmit(d) {
         const n = {
@@ -220,7 +220,6 @@ renderNotice = function () {
       const f = e.target.files[0];
       attach = { name: '', data: '' };
       if (!f) return;
-      if (f.size > 800 * 1024) { toast('附件请控制在 800KB 以内'); e.target.value = ''; return; }
       attach.name = f.name;
       const rd = new FileReader();
       rd.onload = () => { attach.data = rd.result; };
@@ -228,12 +227,11 @@ renderNotice = function () {
     };
 
     body.querySelector('#nImgs').onchange = async (e) => {
-      const files = Array.from(e.target.files || []).slice(0, 5);
+      const files = Array.from(e.target.files || []);
       const hint = body.querySelector('#nImgsHint');
       images = [];
       const ok = [];
       for (const f of files) {
-        if (f.size > 3 * 1024 * 1024) { toast(`${f.name} 超过 3MB，已跳过`); continue; }
         const data = await new Promise((res) => ntCompressImage(f, res));
         if (data) { images.push({ name: f.name, data }); ok.push(f.name); }
       }
@@ -310,9 +308,16 @@ renderNotice = function () {
   document.querySelectorAll('[data-nt-withdraw]').forEach((b) => {
     b.onclick = () => {
       const n = db.notices.find((x) => x.id === b.dataset.ntWithdraw);
+      if (!n) return;
       if (!confirm(`确定撤回通知「${n.title}」？`)) return;
       n.status = '已撤回';
-      commit('撤回通知', n.title); save(); render(); toast('通知已撤回');
+      /* 撤回时一并释放已占用的图片与附件数据 */
+      n.images = [];
+      n.attach = '';
+      n.attachData = '';
+      n.track = n.track || [];
+      n.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '撤回通知并释放附件占用', note: '', time: today() });
+      commit('撤回通知', n.title); save(); render(); toast('通知已撤回，附件占用已释放');
     };
   });
 };
