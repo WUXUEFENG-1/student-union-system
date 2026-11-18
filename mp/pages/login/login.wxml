@@ -1,0 +1,19 @@
+<view class="login-wrap">
+  <view class="brand">
+    <view class="school">云南工业信息职业学院</view>
+    <view class="sysname">应用经济系学生会管理系统</view>
+  </view>
+  <view class="card login-card">
+    <view class="field">
+      <label>账号</label>
+      <input placeholder="请输入账号" value="{{username}}" bindinput="onUser" />
+    </view>
+    <view class="field">
+      <label>密码</label>
+      <input password="true" placeholder="请输入密码" value="{{password}}" bindinput="onPass" />
+    </view>
+    <view wx:if="{{err}}" class="err">{{err}}</view>
+    <button class="btn" loading="{{loading}}" bindtap="submit">登 录</button>
+  </view>
+  <view class="tip">网页端与小程序共用同一套云端数据</view>
+</view>

@@ -1,0 +1,40 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/dashboard/dashboard",
+    "pages/applies/applies",
+    "pages/review/review",
+    "pages/summary/summary",
+    "pages/notice/notice",
+    "pages/activity/activity",
+    "pages/leave/leave",
+    "pages/assess/assess",
+    "pages/personnel/personnel",
+    "pages/dept/dept",
+    "pages/collect/collect",
+    "pages/event/event",
+    "pages/profile/profile",
+    "pages/logs/logs",
+    "pages/detail/detail"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#1657a6",
+    "navigationBarTitleText": "应用经济系学生会",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f2f5fa",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "color": "#7a8798",
+    "selectedColor": "#1657a6",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/dashboard/dashboard", "text": "工作台" },
+      { "pagePath": "pages/applies/applies", "text": "我的申请" },
+      { "pagePath": "pages/notice/notice", "text": "通知公告" },
+      { "pagePath": "pages/profile/profile", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

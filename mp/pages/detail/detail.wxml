@@ -1,0 +1,25 @@
+<view class="card" wx:if="{{record}}">
+  <view class="card-title">{{title}}</view>
+  <view class="row" wx:for="{{rows}}" wx:key="label">
+    <view class="row-main">
+      <view class="row-sub">{{item.label}}</view>
+      <view>{{item.value}}</view>
+    </view>
+  </view>
+</view>
+
+<view class="card" wx:if="{{track.length}}">
+  <view class="card-title">审批轨迹</view>
+  <view class="timeline">
+    <view class="ti" wx:for="{{track}}" wx:key="time">
+      <view class="dot"></view>
+      <view>
+        <view>{{item.action}} · {{item.actor}}</view>
+        <view class="row-sub" wx:if="{{item.note}}">{{item.note}}</view>
+        <view class="row-sub">{{item.time}}</view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="empty" wx:if="{{!record}}">记录不存在或已被删除</view>

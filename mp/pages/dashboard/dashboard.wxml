@@ -1,0 +1,22 @@
+<view class="card">
+  <view class="row-main">
+    <view>
+      <view class="card-title">{{cur.name}}</view>
+      <view class="sub">{{roleName}} · {{cur.dept}} · {{cur.title}}</view>
+    </view>
+  </view>
+  <view class="stat-row" style="margin-top:24rpx">
+    <view class="stat" bindtap="goReview"><view class="num">{{stats.review}}</view><view class="lbl">待审批申请</view></view>
+    <view class="stat"><view class="num">{{stats.acts}}</view><view class="lbl">待审活动</view></view>
+    <view class="stat"><view class="num">{{stats.notices}}</view><view class="lbl">待审通知</view></view>
+  </view>
+</view>
+
+<view class="card">
+  <view class="card-head"><view class="card-title">功能菜单</view></view>
+  <view class="menu-grid">
+    <view class="menu-item" wx:for="{{menu}}" wx:key="key" data-path="{{item.path}}" bindtap="onMenu">
+      <view class="mi-name">{{item.label}}</view>
+    </view>
+  </view>
+</view>

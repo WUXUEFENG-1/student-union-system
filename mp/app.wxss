@@ -1,0 +1,48 @@
+page { background: #f2f5fa; color: #1f2d3d; font-size: 28rpx; }
+.card { background: #fff; border-radius: 20rpx; margin: 24rpx; padding: 28rpx; box-shadow: 0 4rpx 16rpx rgba(22, 87, 166, 0.08); }
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
+.card-title { font-size: 34rpx; font-weight: 700; color: #16324f; }
+.sub { font-size: 24rpx; color: #7a8798; margin-top: 6rpx; }
+
+.badge { display: inline-block; padding: 4rpx 16rpx; border-radius: 20rpx; font-size: 22rpx; line-height: 1.6; }
+.badge.green { background: #e6f4ea; color: #1e7d46; }
+.badge.blue { background: #e8f1fc; color: #1657a6; }
+.badge.amber { background: #fdf3e3; color: #b0761a; }
+.badge.red { background: #fbeaea; color: #c0392b; }
+.badge.gray { background: #eef1f5; color: #6b7785; }
+
+.row { padding: 22rpx 0; border-bottom: 1rpx solid #eef1f5; }
+.row:last-child { border-bottom: none; }
+.row-main { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; }
+.row-title { font-weight: 600; }
+.row-sub { font-size: 24rpx; color: #7a8798; margin-top: 8rpx; line-height: 1.6; }
+.row-actions { display: flex; gap: 24rpx; white-space: nowrap; }
+.link-btn { color: #1657a6; font-size: 26rpx; padding: 8rpx 0; }
+.link-btn.del { color: #c0392b; }
+.link-btn.ghost { color: #7a8798; }
+
+.btn { background: #1657a6; color: #fff; border-radius: 14rpx; padding: 20rpx 32rpx; font-size: 28rpx; text-align: center; }
+.btn.light { background: #e8f1fc; color: #1657a6; }
+.btn.danger { background: #fbeaea; color: #c0392b; }
+.btn.small { padding: 10rpx 24rpx; font-size: 24rpx; border-radius: 10rpx; }
+
+.empty { text-align: center; color: #9aa7b5; padding: 60rpx 0; font-size: 26rpx; }
+.tag { display: inline-block; background: #e8f1fc; color: #1657a6; border-radius: 12rpx; padding: 6rpx 18rpx; font-size: 24rpx; margin-right: 12rpx; }
+
+.menu-grid { display: flex; flex-wrap: wrap; gap: 20rpx; }
+.menu-item { width: 30%; background: #f6f9fd; border-radius: 16rpx; padding: 28rpx 12rpx; text-align: center; }
+.menu-item .mi-name { margin-top: 12rpx; font-size: 25rpx; color: #1f2d3d; }
+
+.stat-row { display: flex; gap: 20rpx; flex-wrap: wrap; }
+.stat { flex: 1; min-width: 30%; background: #f6f9fd; border-radius: 16rpx; padding: 24rpx; text-align: center; }
+.stat .num { font-size: 40rpx; font-weight: 700; color: #1657a6; }
+.stat .lbl { font-size: 24rpx; color: #7a8798; margin-top: 6rpx; }
+
+.field { margin: 20rpx 0; }
+.field label { display: block; font-size: 26rpx; color: #4a5a6a; margin-bottom: 10rpx; }
+.field input, .field textarea, .field picker { background: #f6f9fd; border-radius: 12rpx; padding: 20rpx; font-size: 28rpx; }
+.field textarea { width: 100%; box-sizing: border-box; min-height: 160rpx; }
+
+.timeline { margin-top: 16rpx; }
+.ti { display: flex; gap: 16rpx; padding: 12rpx 0; font-size: 25rpx; color: #4a5a6a; }
+.ti .dot { width: 16rpx; height: 16rpx; border-radius: 50%; background: #1657a6; margin-top: 12rpx; }

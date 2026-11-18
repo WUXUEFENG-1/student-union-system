@@ -1,0 +1,20 @@
+<view class="card">
+  <view class="card-head"><view class="card-title">待我审批（{{list.length}}）</view></view>
+  <view wx:if="{{!list.length}}" class="empty">暂无待处理申请</view>
+  <view class="row" wx:for="{{list}}" wx:key="id">
+    <view class="row-main">
+      <view>
+        <view class="row-title">{{item.name}} · {{item.typeName}}</view>
+        <view class="row-sub">{{item.dept}} · {{item.title}}</view>
+        <view class="row-sub">{{item.flow}}</view>
+        <view class="row-sub">{{item.track}}</view>
+      </view>
+      <view class="badge {{item.tone}}">{{item.status}}</view>
+    </view>
+    <view class="row-actions" style="margin-top:16rpx">
+      <text class="link-btn" data-id="{{item.id}}" bindtap="onView">查看</text>
+      <text wx:if="{{item.can}}" class="link-btn" data-id="{{item.id}}" bindtap="onPass">通过</text>
+      <text wx:if="{{item.can}}" class="link-btn del" data-id="{{item.id}}" bindtap="onReject">驳回</text>
+    </view>
+  </view>
+</view>
