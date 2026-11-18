@@ -175,6 +175,7 @@ function openResignApproveForm(a) {
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: label + '通过', note, time: today() });
       if (last) { a.status = '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = '审核中'; }
+      notifyStagePass(a, label, last ? '' : (a.flow[a.stage] || ''));
       commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
       save(); render();
       toast(last ? '申请已通过' : '已流转至下一审批节点');
@@ -236,6 +237,7 @@ openApproveForm = function (a) {
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: trackNote, time: today() });
       if (last) { a.status = '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = '审核中'; }
+      notifyStagePass(a, stageLabel, last ? '' : (flow[a.stage] || ''));
       commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
       save(); render();
       toast(last ? '申请已通过' : '已流转至下一审批节点');
@@ -541,6 +543,7 @@ function bindResignActions() {
         onSubmit(d) {
           a.status = '已驳回';
           a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
+          notifyReject(a, (applyStages(a)[a.stage || 0]) || '审批', d.note);
           commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`);
           save(); render(); toast('已驳回申请');
         }

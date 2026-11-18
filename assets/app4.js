@@ -192,6 +192,46 @@ function applyApproved(a) {
   }
 }
 
+/* ---------------- 申请进度消息提醒 ----------------
+ * db.msgs：站内消息，投递给申请人本人；审批每过一个节点写一条，工作台集中展示。
+ * 字段：id / to（申请人姓名）/ sno / applyId / typeName / title / text / time / read
+ */
+const MSG_LIMIT = 200;
+function msgNow() { return new Date().toLocaleString('zh-CN', { hour12: false }); }
+function sendApplyMsg(a, text, extra) {
+  if (!a || !a.name) return;
+  db.msgs = db.msgs || [];
+  db.msgs.unshift({
+    id: uid('n'),
+    to: a.name,
+    sno: a.sno || '',
+    applyId: a.id || '',
+    typeName: a.typeName || (APPLY_TYPES[a.type] ? APPLY_TYPES[a.type].name : '申请'),
+    title: (extra && extra.title) || '申请审批进度提醒',
+    text,
+    time: msgNow(),
+    updatedAt: new Date().toISOString(),
+    read: false
+  });
+  if (db.msgs.length > MSG_LIMIT) db.msgs.length = MSG_LIMIT;
+}
+/* 节点通过：告知已通过的节点与即将流转到的下一节点 */
+function notifyStagePass(a, stageLabel, nextLabel) {
+  const text = nextLabel
+    ? `你的「${a.typeName}」已通过【${stageLabel}】，现已流转至【${nextLabel}】审批节点。`
+    : `你的「${a.typeName}」已通过全部审批节点，审批结果为「已通过」。`;
+  sendApplyMsg(a, text);
+}
+/* 驳回：告知在哪个节点被驳回及原因 */
+function notifyReject(a, stageLabel, reason) {
+  sendApplyMsg(a, `你的「${a.typeName}」在【${stageLabel || '审批'}】节点被驳回${reason ? '，原因：' + reason : ''}。`, { title: '申请驳回提醒' });
+}
+/* 当前登录人收到的消息（按姓名投递，重名时以学号区分展示） */
+function myMsgs() {
+  return (db.msgs || []).filter((m) => m.to === (cur ? cur.name : ''));
+}
+function unreadMsgCount() { return myMsgs().filter((m) => !m.read).length; }
+
 /* ---------------- 活动公假证明：模板回填与导出 ---------------- */
 const DEFAULT_PL_TEMPLATE = {
   title: '应用经济系学生会证明',
@@ -619,6 +659,7 @@ function renderJoin() {
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: '', time: today() });
       if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; }
+      notifyStagePass(a, stageLabel, last ? '' : stages[a.stage]);
       commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`); save(); render(); toast(last ? '申请已通过' : '已流转至下一审批节点');
     };
   });
@@ -631,6 +672,7 @@ function renderJoin() {
         onSubmit(d) {
           a.status = '已驳回';
           a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
+          notifyReject(a, (applyStages(a)[a.stage || 0]) || '审批', d.note);
           commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`); save(); render(); toast('已驳回申请');
         }
       });

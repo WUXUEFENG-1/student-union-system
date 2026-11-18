@@ -229,6 +229,13 @@ tr:hover td { background: #fafcff; }
 .todo-item:hover { background: var(--blue-50); }
 .todo-item p { color: var(--blue-600); }
 
+/* 工作台消息提醒：未读条目浅蓝底 + 左侧竖条，点击标记已读 */
+.msg-list .msg-item { cursor: pointer; border-radius: 8px; padding-left: 10px; padding-right: 10px; transition: background .15s; }
+.msg-item:hover { background: var(--blue-50); }
+.msg-item.msg-unread { background: #f2f7ff; border-left: 3px solid var(--blue-600); padding-left: 7px; }
+.msg-item.msg-unread h4 { font-weight: 700; }
+.msg-item.msg-unread:hover { background: #e6f0ff; }
+
 .info-list { display: flex; flex-direction: column; }
 .info-list > div {
   display: flex; justify-content: space-between; gap: 12px;

@@ -109,7 +109,7 @@
 
   /* 流水类业务表：按唯一键双向合并，任一端新增都不丢失；同一条目取审批轨迹更完整（较新）的一方。
      成员/账号/部门/人事等主数据仍以云端为准，防止已删除项在本机复活。 */
-  const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities'];
+  const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities', 'msgs'];
   function idOf(x) { return x.id || x.username || (x.name + '|' + x.date + '|' + (x.typeName || x.type || '')); }
   /* 比较两条同 id 记录哪条更新：审批/操作轨迹更长者为新，其次按时间字段 */
   function newer(a, b) {

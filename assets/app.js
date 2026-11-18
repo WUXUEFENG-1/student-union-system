@@ -492,6 +492,8 @@ function renderDashboard() {
   const tasks = pendingTasks();
   const activeMembers = db.members.filter((m) => m.status === '在任').length;
   const openEvents = db.events.filter((e) => e.status === '报名中').length;
+  const msgs = myMsgs();
+  const unread = msgs.filter((m) => !m.read).length;
 
   const roleBrief = {
     admin: '管理员拥有全部权限，并可查看系统监测数据与操作日志。',
@@ -535,11 +537,40 @@ function renderDashboard() {
           </div>`).join('') || '<div class="empty">暂无通知</div>'}
         </div>
       </div>
+    </div>
+    <div class="card" id="msgCard">
+      <div class="card-head">
+        <div><h2>消息提醒${unread ? `<span class="badge amber" style="margin-left:8px">${unread} 条未读</span>` : ''}</h2>
+          <div class="sub">申请审批每过一个节点会在此提示；点击消息可标记为已读</div></div>
+        ${msgs.length ? '<button class="primary-btn light" id="msgReadAll">全部已读</button>' : ''}
+      </div>
+      ${msgs.length ? `<div class="notice-list msg-list">${msgs.slice(0, 12).map((m) => `
+        <div class="notice-item msg-item${m.read ? '' : ' msg-unread'}" data-msg="${esc(m.id)}">
+          <h4><span class="badge ${m.read ? '' : 'amber'}">${m.read ? '已读' : '未读'}</span>${esc(m.title)}</h4>
+          <p>${esc(m.text)}</p>
+          <div class="notice-meta">${esc(m.time)}${m.sno ? ' · 学号 ' + esc(m.sno) : ''}</div>
+        </div>`).join('')}</div>` : '<div class="empty">暂无消息，申请审批有进展时会在这里提醒您</div>'}
     </div>`;
 
   document.querySelectorAll('[data-go]').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); switchView(el.dataset.go); };
   });
+  /* 消息交互：点单条标记已读；全部已读一键清空未读角标 */
+  document.querySelectorAll('[data-msg]').forEach((el) => {
+    el.onclick = () => {
+      const m = (db.msgs || []).find((x) => x.id === el.dataset.msg);
+      if (!m || m.read) return;
+      m.read = true; m.updatedAt = new Date().toISOString(); save(); render();
+    };
+  });
+  const readAll = document.getElementById('msgReadAll');
+  if (readAll) readAll.onclick = () => {
+    const has = myMsgs().some((m) => !m.read);
+    if (!has) { toast('暂无未读消息'); return; }
+    const now = new Date().toISOString();
+    myMsgs().forEach((m) => { if (!m.read) { m.read = true; m.updatedAt = now; } });
+    commit('已读全部消息', '工作台消息标记为已读'); save(); render();
+  };
 }
 
 /* ---------------- 系统监测 ---------------- */

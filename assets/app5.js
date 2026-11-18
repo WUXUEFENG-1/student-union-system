@@ -245,6 +245,7 @@ function openApproveForm(a) {
       a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel + '通过', note: trackNote, time: today() });
       if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); }
       else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; }
+      notifyStagePass(a, stageLabel, last ? '' : (cfg.stages[a.stage] || ''));
       commit('审批申请', `${a.typeName} · ${a.name} → ${a.status}`);
       save(); render();
       toast(last ? '申请已通过' : '已流转至下一审批节点');
