@@ -163,6 +163,14 @@ function canApprove(a) {
 
 const PENDING_STATUS = ['待审核', '审核中', '待分派', '处理中', '待审批'];
 
+const LEAVE_REVIEWER = { presidium: '责任教师', minister: '主席团', student: '部长/副部长' };
+
+function canReviewLeave(l) {
+  if (l.status !== '待审核') return false;
+  const map = { teacher: '责任教师', presidium: '主席团', minister: '部长/副部长' };
+  return map[g().cur.role] === l.reviewer;
+}
+
 function myReviewApplies() {
   const { db } = g();
   return (db.applies || []).filter((x) => {
@@ -199,5 +207,5 @@ module.exports = {
   today, uid, typeName, roleFromTitle, normalizeTitle, matchMember, normalize,
   allPower, isPublisher, log, commit, isMinisterApplicant, applyStages,
   isSelf, canApprove, PENDING_STATUS, myReviewApplies, sendApplyMsg,
-  notifyStagePass, menuOf, curRole
+  notifyStagePass, menuOf, curRole, LEAVE_REVIEWER, canReviewLeave
 };

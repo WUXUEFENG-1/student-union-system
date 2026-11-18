@@ -1,0 +1,2 @@
+.detail-img { width: 100%; height: 360rpx; margin-top: 16rpx; border-radius: 12rpx; }
+.sign-thumb { width: 200rpx; height: 100rpx; }

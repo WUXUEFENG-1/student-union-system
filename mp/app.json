@@ -15,6 +15,9 @@
     "pages/event/event",
     "pages/profile/profile",
     "pages/logs/logs",
+    "pages/apply-form/apply-form",
+    "pages/attendance/attendance",
+    "pages/asset/asset",
     "pages/detail/detail"
   ],
   "window": {

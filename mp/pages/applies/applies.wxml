@@ -1,5 +1,5 @@
 <view class="card">
-  <view class="card-head"><view class="card-title">{{title}}（{{list.length}}）</view></view>
+  <view class="card-head"><view class="card-title">{{title}}（{{list.length}}）</view><text class="link-btn" bindtap="onExport">导出CSV</text></view>
   <view wx:if="{{!list.length}}" class="empty">暂无申请记录</view>
   <view class="row" wx:for="{{list}}" wx:key="id">
     <view class="row-main">

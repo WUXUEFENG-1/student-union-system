@@ -1,6 +1,6 @@
 <view class="card">
   <view class="card-head"><view class="card-title">{{title}}（{{list.length}}）</view></view>
-  <view wx:if="{{!list.length}}" class="empty">暂无数据</view>
+  <view wx:if="{{!list.length}}" class="empty">暂无活动</view>
   <view class="row" wx:for="{{list}}" wx:key="id">
     <view class="row-main">
       <view>
@@ -8,10 +8,12 @@
         <view class="row-sub">{{item.sub1}}</view>
         <view class="row-sub">{{item.sub2}}</view>
       </view>
-      <view wx:if="{{item.status}}" class="badge {{item.tone}}">{{item.status}}</view>
+      <view class="badge {{item.tone}}">{{item.status}}</view>
     </view>
     <view class="row-actions" style="margin-top:16rpx">
       <text class="link-btn" data-type="{{item.detail}}" data-id="{{item.id}}" bindtap="onView">查看</text>
+      <text wx:if="{{item.canSign}}" class="link-btn" data-act="sign" data-id="{{item.id}}" bindtap="onAction">报名</text>
+      <text wx:if="{{item.signed}}" class="link-btn del" data-act="cancel" data-id="{{item.id}}" bindtap="onAction">取消报名</text>
       <text wx:if="{{item.canDel}}" class="link-btn del" data-act="del" data-id="{{item.id}}" bindtap="onAction">删除</text>
     </view>
   </view>

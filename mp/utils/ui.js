@@ -16,7 +16,10 @@ const ROUTES = {
   collect: '/pages/collect/collect',
   event: '/pages/event/event',
   logs: '/pages/logs/logs',
-  profile: '/pages/profile/profile'
+  profile: '/pages/profile/profile',
+  applyform: '/pages/apply-form/apply-form',
+  attendance: '/pages/attendance/attendance',
+  asset: '/pages/asset/asset'
 };
 
 function toneClass(s) { return tone(s); }

@@ -8,6 +8,35 @@
   </view>
 </view>
 
+<view class="card" wx:if="{{valueRows.length}}">
+  <view class="card-title">申请内容</view>
+  <view class="row" wx:for="{{valueRows}}" wx:key="label">
+    <view class="row-main">
+      <view class="row-sub">{{item.label}}</view>
+      <view>{{item.value}}</view>
+    </view>
+  </view>
+</view>
+
+<view class="card" wx:if="{{images.length}}">
+  <view class="card-title">附件图片</view>
+  <image wx:for="{{images}}" wx:key="*this" src="{{item}}" mode="aspectFit" class="detail-img" data-src="{{item}}" bindtap="previewImg" />
+</view>
+
+<view class="card" wx:if="{{signs.length}}">
+  <view class="card-title">审批签字</view>
+  <view class="row" wx:for="{{signs}}" wx:key="time">
+    <view class="row-main">
+      <view>
+        <view class="row-title">{{item.action}} · {{item.actor}}</view>
+        <view class="row-sub" wx:if="{{item.opinion}}">{{item.opinion}}</view>
+        <view class="row-sub">{{item.time}}</view>
+      </view>
+      <image wx:if="{{item.sign}}" src="{{item.sign}}" mode="aspectFit" class="sign-thumb" />
+    </view>
+  </view>
+</view>
+
 <view class="card" wx:if="{{track.length}}">
   <view class="card-title">审批轨迹</view>
   <view class="timeline">

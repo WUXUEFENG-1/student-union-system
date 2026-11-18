@@ -1,0 +1,4 @@
+.mask { position: fixed; inset: 0; background: rgba(15, 30, 48, 0.55); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 40rpx; }
+.sign-card { width: 100%; background: #fff; border-radius: 20rpx; padding: 32rpx; }
+.sign-canvas { width: 100%; height: 320rpx; background: #f6f9fd; border: 1rpx solid #d9e2ec; border-radius: 12rpx; margin: 20rpx 0; }
+.sign-card .row-actions { justify-content: flex-end; gap: 32rpx; margin-top: 20rpx; }

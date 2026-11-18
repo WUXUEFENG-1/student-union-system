@@ -1,0 +1,51 @@
+<!-- 选择申请类型 -->
+<view class="card" wx:if="{{step === 'pick'}}">
+  <view class="card-title">选择申请类型</view>
+  <view class="row" wx:for="{{types}}" wx:key="key" data-key="{{item.key}}" bindtap="openForm">
+    <view class="row-main">
+      <view class="row-title">{{item.name}}</view>
+      <text class="link-btn">前往填写</text>
+    </view>
+  </view>
+</view>
+
+<!-- 申请表单 -->
+<view wx:if="{{step === 'form'}}">
+  <view class="card">
+    <view class="card-title">{{title}}</view>
+    <view class="sub">{{hint}}</view>
+    <view class="row-sub" style="margin-top:16rpx">姓名：{{cur.name}}　学号：{{cur.sno || '—'}}　部门：{{cur.dept}}　职务：{{cur.title}}</view>
+  </view>
+
+  <view class="card">
+    <view class="field" wx:for="{{fields}}" wx:key="key">
+      <label>{{item.label}}<text wx:if="{{item.required}}" style="color:#c0392b"> *</text></label>
+
+      <picker wx:if="{{item.type === 'select'}}" mode="selector" range="{{item.options}}"
+        data-key="{{item.key}}" data-options="{{item.options}}" bindchange="onSelect">
+        <view class="picker-box">{{values[item.key] || '请选择'}}</view>
+      </picker>
+
+      <picker wx:elif="{{item.type === 'date'}}" mode="date" data-key="{{item.key}}" bindchange="onDate">
+        <view class="picker-box">{{values[item.key] || '请选择日期'}}</view>
+      </picker>
+
+      <textarea wx:elif="{{item.type === 'textarea'}}" placeholder="{{item.placeholder}}"
+        value="{{values[item.key]}}" data-key="{{item.key}}" bindinput="onInput" />
+
+      <input wx:elif="{{item.type === 'number'}}" type="number" placeholder="{{item.placeholder}}"
+        value="{{values[item.key]}}" data-key="{{item.key}}" bindinput="onInput" />
+
+      <block wx:elif="{{item.type === 'file'}}">
+        <button class="btn light small" data-key="{{item.key}}" bindtap="onFile">选择图片附件</button>
+        <image wx:if="{{values[item.key]}}" src="{{values[item.key]}}" mode="aspectFit" class="attach-img" />
+      </block>
+
+      <input wx:else placeholder="{{item.placeholder}}" value="{{values[item.key]}}"
+        data-key="{{item.key}}" bindinput="onInput" />
+    </view>
+
+    <button class="btn" loading="{{submitting}}" bindtap="submit">提交申请</button>
+    <button class="btn light" style="margin-top:20rpx" bindtap="backToPick">返回重选类型</button>
+  </view>
+</view>

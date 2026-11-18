@@ -18,3 +18,25 @@
     </view>
   </view>
 </view>
+
+<!-- 手写签字审批弹窗 -->
+<view class="mask" wx:if="{{signVisible}}">
+  <view class="sign-card">
+    <view class="card-title">审批签字</view>
+    <canvas canvas-id="signCanvas" class="sign-canvas"
+      bindtouchstart="sStart" bindtouchmove="sMove" bindtouchend="sEnd"></canvas>
+    <view class="field">
+      <label>联系电话</label>
+      <input value="{{phone}}" bindinput="onPhone" />
+    </view>
+    <view class="field">
+      <label>审批意见</label>
+      <textarea value="{{opinion}}" bindinput="onOpinion" placeholder="同意 / 意见说明" />
+    </view>
+    <view class="row-actions">
+      <text class="link-btn ghost" bindtap="clearSign">清除签名</text>
+      <text class="link-btn ghost" bindtap="cancelSign">取消</text>
+      <text class="link-btn" bindtap="confirmSign">确认通过</text>
+    </view>
+  </view>
+</view>

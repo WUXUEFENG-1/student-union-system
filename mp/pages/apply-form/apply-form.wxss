@@ -1,0 +1,3 @@
+.picker-box { background: #f6f9fd; border-radius: 12rpx; padding: 20rpx; font-size: 28rpx; }
+.attach-img { width: 300rpx; height: 300rpx; margin-top: 16rpx; border-radius: 12rpx; }
+.field textarea, .field input { width: 100%; box-sizing: border-box; }

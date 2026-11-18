@@ -1,0 +1,40 @@
+<view class="card">
+  <view class="card-head">
+    <view class="card-title">例会签到</view>
+    <button wx:if="{{canManage}}" class="btn light small" bindtap="toggleForm">{{showForm ? '收起' : '+ 新建例会'}}</button>
+  </view>
+  <picker wx:if="{{sessions.length}}" mode="selector" range="{{sessions}}" range-key="title" bindchange="onSession">
+    <view class="picker-box">{{sessionTitle}}</view>
+  </picker>
+  <view wx:if="{{!sessions.length}}" class="empty">还没有例会记录</view>
+
+  <view class="att-summary" style="margin-top:20rpx">
+    <text>应到 {{total}} 人</text>
+    <text>实到 {{present}} 人</text>
+    <text>出勤率 {{rate}}%</text>
+  </view>
+
+  <view class="att-grid">
+    <view wx:for="{{members}}" wx:key="id"
+      class="att-chip {{records[item.id] ? 'on' : ''}}"
+      data-id="{{item.id}}" bindtap="toggleAtt">
+      {{item.name}} · {{item.title}}
+    </view>
+    <view wx:if="{{!members.length}}" class="empty">本部门暂无在任成员</view>
+  </view>
+</view>
+
+<view class="card" wx:if="{{showForm}}">
+  <view class="card-title">新建例会</view>
+  <view class="field">
+    <label>例会主题</label>
+    <input value="{{form.title}}" data-key="title" bindinput="onFormInput" />
+  </view>
+  <view class="field">
+    <label>会议日期</label>
+    <picker mode="date" value="{{form.date}}" bindchange="onFormDate">
+      <view class="picker-box">{{form.date}}</view>
+    </picker>
+  </view>
+  <button class="btn" bindtap="createSession">创建例会</button>
+</view>

@@ -1,0 +1,5 @@
+.att-summary { display: flex; gap: 24rpx; font-size: 26rpx; color: #4a5a6a; margin-bottom: 20rpx; }
+.att-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.att-chip { background: #f6f9fd; border: 1rpx solid #e3ebf4; border-radius: 14rpx; padding: 18rpx 24rpx; font-size: 26rpx; color: #1f2d3d; }
+.att-chip.on { background: #e6f4ea; border-color: #b7e4c7; color: #1e7d46; }
+.picker-box { background: #f6f9fd; border-radius: 12rpx; padding: 20rpx; font-size: 28rpx; }

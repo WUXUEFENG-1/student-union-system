@@ -1,0 +1,58 @@
+<view class="card">
+  <view class="card-head">
+    <view>
+      <view class="card-title">物资台账</view>
+      <view class="sub">在库 {{inStock}} 项，借出 {{borrowed}} 项</view>
+    </view>
+    <button wx:if="{{canManage}}" class="btn light small" bindtap="toggleAdd">{{showAdd ? '收起' : '+ 新增物资'}}</button>
+  </view>
+
+  <view wx:if="{{!list.length}}" class="empty">暂无物资</view>
+  <view class="row" wx:for="{{list}}" wx:key="id">
+    <view class="row-main">
+      <view>
+        <view class="row-title">{{item.name}} <text class="sub">×{{item.qty}}</text></view>
+        <view class="row-sub">借用：{{item.borrower}}｜借出 {{item.date}}｜应还 {{item.due}}</view>
+      </view>
+      <view class="badge {{item.tone}}">{{item.status}}</view>
+    </view>
+    <view class="row-actions" style="margin-top:16rpx">
+      <text wx:if="{{canManage}}" class="link-btn" data-id="{{item.id}}" bindtap="onBorrowClick">{{item.status === '借出' ? '归还入库' : '借出登记'}}</text>
+      <text wx:if="{{canManage}}" class="link-btn del" data-id="{{item.id}}" bindtap="delAsset">删除</text>
+    </view>
+  </view>
+</view>
+
+<view class="card" wx:if="{{showAdd}}">
+  <view class="card-title">新增物资</view>
+  <view class="field">
+    <label>物资名称</label>
+    <input value="{{addForm.name}}" data-key="name" bindinput="onAddInput" />
+  </view>
+  <view class="field">
+    <label>数量</label>
+    <input type="number" value="{{addForm.qty}}" data-key="qty" bindinput="onAddInput" />
+  </view>
+  <button class="btn" bindtap="addAsset">添加</button>
+</view>
+
+<view class="card" wx:if="{{showBorrow}}">
+  <view class="card-title">借出登记</view>
+  <view class="field">
+    <label>借用部门 / 人</label>
+    <input value="{{borrowForm.borrower}}" data-key="borrower" bindinput="onBorrowInput" />
+  </view>
+  <view class="field">
+    <label>借出日期</label>
+    <picker mode="date" value="{{borrowForm.date}}" data-key="date" bindchange="onBorrowDate">
+      <view class="picker-box">{{borrowForm.date}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <label>应还日期</label>
+    <picker mode="date" value="{{borrowForm.due}}" data-key="due" bindchange="onBorrowDate">
+      <view class="picker-box">{{borrowForm.due}}</view>
+    </picker>
+  </view>
+  <button class="btn" bindtap="submitBorrow">确认借出</button>
+</view>

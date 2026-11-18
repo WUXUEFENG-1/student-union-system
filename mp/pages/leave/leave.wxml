@@ -1,18 +1,51 @@
 <view class="card">
-  <view class="card-head"><view class="card-title">{{title}}（{{list.length}}）</view></view>
-  <view wx:if="{{!list.length}}" class="empty">暂无数据</view>
+  <view class="card-head">
+    <view class="card-title">请假表（{{list.length}}）</view>
+    <button wx:if="{{canSubmit}}" class="btn light small" bindtap="toggleForm">{{showForm ? '收起' : '+ 提交请假'}}</button>
+  </view>
+  <view wx:if="{{!list.length}}" class="empty">暂无请假记录</view>
   <view class="row" wx:for="{{list}}" wx:key="id">
     <view class="row-main">
       <view>
-        <view class="row-title">{{item.title}}</view>
-        <view class="row-sub">{{item.sub1}}</view>
-        <view class="row-sub">{{item.sub2}}</view>
+        <view class="row-title">{{item.applicant}} · {{item.type}}</view>
+        <view class="row-sub">{{item.dept}} · {{item.role}}｜审核人：{{item.reviewer}}</view>
+        <view class="row-sub">{{item.start}} ~ {{item.end}}</view>
+        <view class="row-sub">{{item.reason}}</view>
       </view>
-      <view wx:if="{{item.status}}" class="badge {{item.tone}}">{{item.status}}</view>
+      <view class="badge {{item.tone}}">{{item.status}}</view>
     </view>
     <view class="row-actions" style="margin-top:16rpx">
-      <text class="link-btn" data-type="{{item.detail}}" data-id="{{item.id}}" bindtap="onView">查看</text>
-      <text wx:if="{{item.canDel}}" class="link-btn del" data-act="del" data-id="{{item.id}}" bindtap="onAction">删除</text>
+      <text wx:if="{{item.canReview}}" class="link-btn" data-id="{{item.id}}" bindtap="onPass">通过</text>
+      <text wx:if="{{item.canReview}}" class="link-btn del" data-id="{{item.id}}" bindtap="onReject">驳回</text>
+      <text wx:if="{{item.canRevoke}}" class="link-btn del" data-id="{{item.id}}" bindtap="onRevoke">撤回</text>
+      <text wx:if="{{item.canDelete}}" class="link-btn del" data-id="{{item.id}}" bindtap="onDel">删除</text>
     </view>
   </view>
+</view>
+
+<view class="card" wx:if="{{showForm}}">
+  <view class="card-title">提交请假申请</view>
+  <view class="field">
+    <label>请假类型</label>
+    <picker mode="selector" range="{{typeOptions}}" bindchange="onType">
+      <view class="picker-box">{{form.type}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <label>开始日期</label>
+    <picker mode="date" value="{{form.start}}" data-key="start" bindchange="onDate">
+      <view class="picker-box">{{form.start}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <label>结束日期</label>
+    <picker mode="date" value="{{form.end}}" data-key="end" bindchange="onDate">
+      <view class="picker-box">{{form.end}}</view>
+    </picker>
+  </view>
+  <view class="field">
+    <label>请假原因</label>
+    <textarea value="{{form.reason}}" data-key="reason" bindinput="onInput" placeholder="请填写具体事由" />
+  </view>
+  <button class="btn" bindtap="submit">提交申请</button>
 </view>
