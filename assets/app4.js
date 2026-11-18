@@ -226,6 +226,47 @@ function notifyStagePass(a, stageLabel, nextLabel) {
 function notifyReject(a, stageLabel, reason) {
   sendApplyMsg(a, `你的「${a.typeName}」在【${stageLabel || '审批'}】节点被驳回${reason ? '，原因：' + reason : ''}。`, { title: '申请驳回提醒' });
 }
+
+/* 统一驳回弹窗：可选「退回上一流程节点」或「退回本人（转草稿可编辑重提）」。
+ * stage 0 无上一节点，只能退回本人。 */
+function openRejectForm(a) {
+  const stages = applyStages(a);
+  const curStage = a.stage || 0;
+  const curLabel = stages[curStage] || '审批';
+  const canBack = curStage > 0;
+  const prevLabel = canBack ? stages[curStage - 1] : '';
+  const options = [];
+  if (canBack) options.push({ value: 'prev', label: `驳回到上一流程节点（交回【${prevLabel}】重新审批）` });
+  options.push({ value: 'self', label: '驳回到本人（转为草稿，修改后重新提交）' });
+  openForm({
+    title: '驳回申请 · ' + a.name,
+    hint: canBack ? '可选择退回上一审批节点重新审批，或退回申请人本人修改后重新提交。' : '当前为首个审批节点，只能退回申请人本人修改。',
+    fields: [
+      { key: 'backTarget', label: '驳回去向', type: 'select', options },
+      { key: 'note', label: '驳回原因', type: 'textarea', required: true }
+    ],
+    onSubmit(d) {
+      const reason = d.note || '';
+      if (d.backTarget === 'prev' && canBack) {
+        a.stage = curStage - 1;
+        a.status = a.type === 'feedback' ? '处理中' : '审核中';
+        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: `退回【${prevLabel}】重新审批`, note: reason, time: today() });
+        sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被退回【${prevLabel}】，将由该节点重新审批。${reason ? '原因：' + reason : ''}`, { title: '申请退回提醒' });
+        commit('退回上一节点', `${a.typeName} · ${a.name} → 【${prevLabel}】：${reason}`);
+        toast('已退回上一审批节点');
+      } else {
+        a.status = '草稿';
+        a.stage = 0;
+        a.locked = false;
+        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回（退回本人，转草稿）', note: reason, time: today() });
+        sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被退回本人，请修改后重新提交。${reason ? '原因：' + reason : ''}`, { title: '申请驳回提醒' });
+        commit('驳回到本人（草稿）', `${a.typeName} · ${a.name}：${reason}`);
+        toast('已退回本人，转为草稿');
+      }
+      save(); render();
+    }
+  });
+}
 /* 当前登录人收到的消息（按姓名投递，重名时以学号区分展示） */
 function myMsgs() {
   return (db.msgs || []).filter((m) => m.to === (cur ? cur.name : ''));
@@ -313,11 +354,11 @@ function applyRow(a, review) {
   const terminalRejected = ['已驳回', '已撤回', '已作废'].includes(a.status);
   const withdrawable = !review && stage0 && pending;
   const deletable = !review && (stage0 || terminalRejected);
-  const editable = !review && a.status === '已驳回';
+  const editable = !review && ['已驳回', '草稿'].includes(a.status);
   const ops = [];
   ops.push(`<button class="link-btn" data-apply-view="${a.id}">查看</button>`);
   if (editable) {
-    ops.push(`<button class="link-btn" data-apply-edit="${a.id}">重新编辑</button>`);
+    ops.push(`<button class="link-btn" data-apply-edit="${a.id}">${a.status === '草稿' ? '继续编辑' : '重新编辑'}</button>`);
   }
   if (withdrawable) {
     ops.push(`<button class="link-btn del" data-apply-cancel="${a.id}">撤回</button>`);
@@ -636,7 +677,7 @@ function renderJoin() {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyEdit);
       if (!a) return;
-      if (a.status !== '已驳回') { toast('仅已驳回的申请可重新编辑'); return; }
+      if (!['已驳回', '草稿'].includes(a.status)) { toast('仅已驳回或草稿状态的申请可重新编辑'); return; }
       applyForm(a.type, a);
     };
   });
@@ -666,16 +707,8 @@ function renderJoin() {
   document.querySelectorAll('[data-apply-reject]').forEach((b) => {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyReject);
-      openForm({
-        title: '驳回申请 · ' + a.name,
-        fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
-        onSubmit(d) {
-          a.status = '已驳回';
-          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回', note: d.note, time: today() });
-          notifyReject(a, (applyStages(a)[a.stage || 0]) || '审批', d.note);
-          commit('驳回申请', `${a.typeName} · ${a.name}：${d.note}`); save(); render(); toast('已驳回申请');
-        }
-      });
+      if (!a) return;
+      openRejectForm(a);
     };
   });
 
