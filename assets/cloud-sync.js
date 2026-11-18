@@ -72,22 +72,24 @@
 
   function pushLocal() {
     return readRemote().then(function (row) {
+      /* 以本机快照为底稿推送：成员/账号/部门等主数据的增删改都以本机为准，
+         否则「以云端为底稿」会把刚删除的成员、刚改的密码瞬间覆盖回旧值。 */
       let snap = cleanSnapshot();
       if (row && row.data) {
-        /* 先把云端已有流水并入本机快照，避免整份回写时冲掉他人刚提交、本机尚未拉取的申请/日志 */
         const remote = normalize(JSON.parse(JSON.stringify(row.data)));
-        mergeBoth(remote, snap);
-        remote.__removed = Object.assign({}, snap.__removed || {}, remote.__removed || {});
-        snap = remote;
+        /* 只把云端的流水记录并入本机，避免冲掉他人刚提交、本机尚未拉取的申请/日志 */
+        const gone = Object.assign({}, snap.__removed || {}, remote.__removed || {});
+        mergeUnionsInto(snap, remote, gone);
+        snap.__removed = gone;
       }
       const payload = { id: ROW_ID, data: snap, updated_at: iso() };
-      return row ? writeRemote(payload) : createRemote(payload);
-    }).then(function () {
-      localStorage.removeItem(PENDING);
-      try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
-      localStorage.setItem(STORE_KEY, JSON.stringify(db));
-      status('云端已连接 · 名单实时同步', true);
-      return true;
+      return (row ? writeRemote(payload) : createRemote(payload)).then(function () {
+        localStorage.removeItem(PENDING);
+        try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
+        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        status('云端已连接 · 名单实时同步', true);
+        return true;
+      });
     }).catch(function () {
       localStorage.setItem(PENDING, '1');
       status('云端离线 · 改动已暂存在本机', false);
@@ -105,23 +107,29 @@
     if (ta !== tb) return ta > tb ? a : b;
     return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
   }
-  /* 双向合并流水表到 remote（原地修改并返回）：并集 + 同 id 取较新；被本地删除的墓碑条目不再并回 */
-  function mergeBoth(remote, local) {
-    const rem = local.__removed || {};
+  /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；gone 里的墓碑条目不再并回 */
+  function mergeUnionsInto(target, source, gone) {
+    gone = gone || {};
     UNION_ARRAYS.forEach(function (k) {
-      const rArr = Array.isArray(remote[k]) ? remote[k] : [];
-      const lArr = Array.isArray(local[k]) ? local[k] : [];
-      const remIds = new Set(rem[k] || []);
-      if (!rArr.length && !lArr.length) return;
+      const tArr = Array.isArray(target[k]) ? target[k] : [];
+      const sArr = Array.isArray(source[k]) ? source[k] : [];
+      if (!tArr.length && !sArr.length) return;
+      const remIds = new Set(gone[k] || []);
       const map = new Map();
-      rArr.forEach(function (x) { const id = idOf(x); if (!remIds.has(id)) map.set(id, x); });
-      lArr.forEach(function (x) {
+      tArr.forEach(function (x) { const id = idOf(x); if (!remIds.has(id)) map.set(id, x); });
+      sArr.forEach(function (x) {
         const id = idOf(x);
+        if (remIds.has(id)) return;
         map.set(id, map.has(id) ? newer(map.get(id), x) : x);
       });
-      remote[k] = Array.from(map.values());
+      target[k] = Array.from(map.values());
     });
-    return remote;
+    return target;
+  }
+
+  /* 把 local 的流水并入 remote（拉取云端时用） */
+  function mergeBoth(remote, local) {
+    return mergeUnionsInto(remote, local, local.__removed || {});
   }
 
   /* 用云端数据覆盖本机（云端为准，删除才会真正生效）；同时并入本机尚未上云的流水新增，
