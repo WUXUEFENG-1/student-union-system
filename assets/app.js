@@ -316,7 +316,6 @@ function openForm({ title, fields = [], values = {}, okText = '保存', hint = '
       const file = e.target.files[0];
       fileData[f.key] = '';
       if (!file) return;
-      if (file.size > 800 * 1024) { toast('附件请控制在 800KB 以内'); e.target.value = ''; return; }
       const rd = new FileReader();
       rd.onload = () => { fileData[f.key] = rd.result; };
       rd.readAsDataURL(file);
