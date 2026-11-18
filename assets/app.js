@@ -517,6 +517,19 @@ function renderDashboard() {
       <div class="stat"><div class="k">进行中收集</div><div class="v">${db.collects.filter((c) => c.status === '进行中').length}</div><div class="t">已提交 ${db.collects.reduce((s, c) => s + c.submissions.length, 0)} 份</div></div>
       <div class="stat"><div class="k">可报名活动</div><div class="v">${openEvents}</div><div class="t">报名总人次 ${db.events.reduce((s, e) => s + e.signups.length, 0)}</div></div>
     </div>
+    <div class="card" id="msgCard">
+      <div class="card-head">
+        <div><h2>消息提醒${unread ? `<span class="badge amber" style="margin-left:8px">${unread} 条未读</span>` : ''}</h2>
+          <div class="sub">申请审批每过一个节点会在此提示；点击消息可标记为已读</div></div>
+        ${msgs.length ? '<button class="primary-btn light" id="msgReadAll">全部已读</button>' : ''}
+      </div>
+      ${msgs.length ? `<div class="notice-list msg-list">${msgs.slice(0, 12).map((m) => `
+        <div class="notice-item msg-item${m.read ? '' : ' msg-unread'}" data-msg="${esc(m.id)}">
+          <h4><span class="badge ${m.read ? '' : 'amber'}">${m.read ? '已读' : '未读'}</span>${esc(m.title)}</h4>
+          <p>${esc(m.text)}</p>
+          <div class="notice-meta">${esc(m.time)}${m.sno ? ' · 学号 ' + esc(m.sno) : ''}</div>
+        </div>`).join('')}</div>` : '<div class="empty">暂无消息，申请审批有进展时会在这里提醒您</div>'}
+    </div>
     <div class="grid-2">
       <div class="card">
         <div class="card-head"><div><h2>我的待办</h2><div class="sub">按当前角色权限汇总</div></div></div>
@@ -538,19 +551,7 @@ function renderDashboard() {
         </div>
       </div>
     </div>
-    <div class="card" id="msgCard">
-      <div class="card-head">
-        <div><h2>消息提醒${unread ? `<span class="badge amber" style="margin-left:8px">${unread} 条未读</span>` : ''}</h2>
-          <div class="sub">申请审批每过一个节点会在此提示；点击消息可标记为已读</div></div>
-        ${msgs.length ? '<button class="primary-btn light" id="msgReadAll">全部已读</button>' : ''}
-      </div>
-      ${msgs.length ? `<div class="notice-list msg-list">${msgs.slice(0, 12).map((m) => `
-        <div class="notice-item msg-item${m.read ? '' : ' msg-unread'}" data-msg="${esc(m.id)}">
-          <h4><span class="badge ${m.read ? '' : 'amber'}">${m.read ? '已读' : '未读'}</span>${esc(m.title)}</h4>
-          <p>${esc(m.text)}</p>
-          <div class="notice-meta">${esc(m.time)}${m.sno ? ' · 学号 ' + esc(m.sno) : ''}</div>
-        </div>`).join('')}</div>` : '<div class="empty">暂无消息，申请审批有进展时会在这里提醒您</div>'}
-    </div>`;
+`;
 
   document.querySelectorAll('[data-go]').forEach((el) => {
     el.onclick = (e) => { e.stopPropagation(); switchView(el.dataset.go); };
