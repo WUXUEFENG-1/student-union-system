@@ -486,12 +486,14 @@ function renderApplySummary() {
   }).join('');
   const headCheck = canDel ? '<th style="width:38px"><input type="checkbox" id="summaryCheckAll"></th>' : '';
   const bulkBtn = canDel ? '<button class="primary-btn light del" id="summaryBulkDel" disabled>批量删除（0）</button>' : '';
+  const bulkPdfBtn = canDel ? '<button class="primary-btn light" id="summaryBulkPdf" disabled>批量导出 PDF（0）</button>' : '';
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
         <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，按申请事项筛选，审批流程与轨迹全程留痕</div></div>
         <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           ${bulkBtn}
+          ${bulkPdfBtn}
           <div class="field" style="min-width:220px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
         </div>
       </div>
@@ -509,6 +511,8 @@ function renderApplySummary() {
       const n = checked.length;
       const btn = $('#summaryBulkDel');
       if (btn) { btn.textContent = `批量删除（${n}）`; btn.disabled = n === 0; }
+      const pdfBtn = $('#summaryBulkPdf');
+      if (pdfBtn) { pdfBtn.textContent = `批量导出 PDF（${n}）`; pdfBtn.disabled = n === 0; }
       const all = $('#summaryCheckAll');
       if (all) all.checked = n > 0 && n === checks().length;
     };
@@ -524,6 +528,11 @@ function renderApplySummary() {
       db.applies = db.applies.filter((a) => !ids.includes(a.id));
       commit('批量删除申请', `删除 ${removed.length} 条：` + removed.map((a) => `${a.typeName}·${a.name}`).join('、'));
       save(); render(); toast(`已删除 ${ids.length} 条申请`);
+    };
+    const bulkPdf = $('#summaryBulkPdf');
+    if (bulkPdf) bulkPdf.onclick = () => {
+      const ids = checks().filter((c) => c.checked).map((c) => c.dataset.applyCheck);
+      batchExportApplyPdf(ids);
     };
   }
   bindApplyView();
