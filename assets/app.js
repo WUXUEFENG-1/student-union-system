@@ -143,6 +143,31 @@ const today = () => new Date().toISOString().slice(0, 10);
 const allPower = () => ['admin', 'teacher', 'presidium'].includes(cur.role);
 const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes(cur.role);
 
+/* 图片压缩：把上传/采集的 base64 图片按最大宽度等比缩放并转 JPEG，避免大文件撑爆云端快照与本地配额 */
+function shrinkImageDataUrl(dataUrl, maxW, quality) {
+  maxW = maxW || 1000;
+  quality = quality || 72;
+  return new Promise((resolve) => {
+    if (!dataUrl || String(dataUrl).indexOf('data:image/') !== 0) return resolve(dataUrl);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = img.width > maxW ? maxW / img.width : 1;
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', quality / 100));
+      } catch (e) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 function tone(status) {
   if (['已通过', '在任', '已发布', '正常', '在库', '进行中', '报名中', '已答复', '已关闭', '已归档'].includes(status)) return 'green';
   if (['待审核', '待审批', '待责任教师审核', '待主席团审核', '待教师审核', '待主席审核', '待副主席审核', '待分派', '处理中', '审核中', '借出'].includes(status)) return 'amber';
@@ -317,7 +342,10 @@ function openForm({ title, fields = [], values = {}, okText = '保存', hint = '
       fileData[f.key] = '';
       if (!file) return;
       const rd = new FileReader();
-      rd.onload = () => { fileData[f.key] = rd.result; };
+      rd.onload = async () => {
+        const isImg = file.type && file.type.indexOf('image/') === 0;
+        fileData[f.key] = isImg ? await shrinkImageDataUrl(rd.result, 1000, 72) : rd.result;
+      };
       rd.readAsDataURL(file);
     };
   });

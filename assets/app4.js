@@ -841,7 +841,7 @@ function openBulkApproveForm(ids) {
     if (!f) return;
     if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
     const rd = new FileReader();
-    rd.onload = () => { signFile = rd.result; };
+    rd.onload = async () => { signFile = await shrinkImageDataUrl(rd.result, 480, 70); };
     rd.readAsDataURL(f);
   };
 }

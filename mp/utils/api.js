@@ -18,7 +18,7 @@ function request(method, url, data) {
         'Content-Type': 'application/json',
         Prefer: 'return=representation'
       },
-      timeout: 8000,
+      timeout: 30000,
       success: (res) => resolve(res.data),
       fail: reject
     });
