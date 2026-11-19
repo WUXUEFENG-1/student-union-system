@@ -1,10 +1,15 @@
 const app = getApp();
 const store = require('../../utils/store');
 const ui = require('../../utils/ui');
+const exp = require('../../utils/export');
 
 Page({
   data: {
     list: [],
+    checked: {},
+    bulkCount: 0,
+    bulkIds: [],
+    bulkMode: false,
     signVisible: false,
     signId: '',
     opinion: '',
@@ -24,7 +29,7 @@ Page({
 
   refresh() {
     const list = store.myReviewApplies().map((a) => this.row(a));
-    this.setData({ list });
+    this.setData({ list, checked: {}, bulkCount: 0, bulkIds: [] });
   },
 
   row(a) {
@@ -44,12 +49,43 @@ Page({
 
   onView(e) { ui.goDetail('apply', e.currentTarget.dataset.id); },
 
-  /* 打开签字审批弹窗 */
+  toggleCheck(e) {
+    const { id } = e.currentTarget.dataset;
+    const checked = Object.assign({}, this.data.checked);
+    if (checked[id]) delete checked[id]; else checked[id] = true;
+    const bulkIds = Object.keys(checked);
+    this.setData({ checked, bulkIds, bulkCount: bulkIds.length });
+  },
+
+  /* 单条通过 */
   onPass(e) {
     const { id } = e.currentTarget.dataset;
     const a = app.globalData.db.applies.find((x) => x.id === id);
     if (!a || !store.canApprove(a)) { wx.showToast({ title: '当前节点无权审批', icon: 'none' }); return; }
-    this.setData({ signVisible: true, signId: id, opinion: '', phone: app.globalData.cur.phone || '', signData: '' });
+    this.setData({ signVisible: true, bulkMode: false, signId: id, bulkIds: [], opinion: '', phone: app.globalData.cur.phone || '', signData: '' });
+  },
+
+  /* 批量通过：仅勾选且当前节点可审的记录 */
+  onBulk() {
+    const eligible = this.data.bulkIds
+      .map((id) => app.globalData.db.applies.find((x) => x.id === id))
+      .filter((a) => a && store.canApprove(a));
+    if (!eligible.length) { wx.showToast({ title: '选中的记录当前节点均无权审批', icon: 'none' }); return; }
+    if (eligible.length < this.data.bulkIds.length) wx.showToast({ title: `已排除 ${this.data.bulkIds.length - eligible.length} 条不可审批记录`, icon: 'none' });
+    this.setData({
+      signVisible: true, bulkMode: true,
+      bulkIds: eligible.map((a) => a.id), signId: '',
+      opinion: '', phone: app.globalData.cur.phone || '', signData: ''
+    });
+  },
+
+  /* 导出：列口径与网页端待我审批列表一致 */
+  onExport() {
+    const rows = store.myReviewApplies().map((a) => [
+      a.name, a.sno || '—', store.typeName(a), a.dept, a.title || '成员',
+      a.date || '', a.status, ui.flowLabel(a), ui.trackText(a)
+    ]);
+    exp.exportCSV(`待我审批列表_${store.today()}`, ['申请人', '学号', '申请事项', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
   },
 
   sStart(e) {
@@ -88,7 +124,6 @@ Page({
   cancelSign() { this.setData({ signVisible: false }); },
 
   confirmSign() {
-    const { signId, opinion, phone } = this.data;
     wx.canvasToTempFilePath({
       canvasId: 'signCanvas',
       success: (res) => {
@@ -96,7 +131,9 @@ Page({
           filePath: res.tempFilePath, encoding: 'base64',
           success: (r) => {
             const signData = `data:image/png;base64,${r.data}`;
-            this.doPass(signId, signData, phone, opinion);
+            const { opinion, phone, bulkMode, bulkIds, signId } = this.data;
+            if (bulkMode) this.doBatch(bulkIds, signData, phone, opinion);
+            else this.doPass(signId, signData, phone, opinion);
           },
           fail: () => wx.showToast({ title: '签字读取失败', icon: 'none' })
         });
@@ -105,9 +142,7 @@ Page({
     });
   },
 
-  doPass(id, signData, phone, opinion) {
-    const a = app.globalData.db.applies.find((x) => x.id === id);
-    if (!a) return;
+  applyOne(a, signData, phone, opinion) {
     const stages = store.applyStages(a);
     const label = stages[a.stage] || '审批';
     const last = a.stage >= stages.length - 1;
@@ -115,8 +150,8 @@ Page({
     a.track.push({ actor: app.globalData.cur.name, role: app.globalData.cur.role, action: label + '通过', note: opinion || '', time: store.today() });
     const signs = (a.approveSigns = a.approveSigns || []);
     signs.push({ sign: signData, phone: phone || '', opinion: opinion || '', actor: app.globalData.cur.name, role: app.globalData.cur.role, action: label, time: store.today() });
-    if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = phone; }
-    else { a.signChair = signData; a.phoneChair = phone; }
+    if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = phone || ''; }
+    else { a.signChair = signData; a.phoneChair = phone || ''; }
 
     if (last) {
       a.status = a.type === 'feedback' ? '已答复' : '已通过';
@@ -126,9 +161,30 @@ Page({
       a.status = a.type === 'feedback' ? '处理中' : '审核中';
     }
     store.notifyStagePass(a, label, last ? '' : stages[a.stage] || '');
+    return last;
+  },
+
+  doPass(id, signData, phone, opinion) {
+    const a = app.globalData.db.applies.find((x) => x.id === id);
+    if (!a || !store.canApprove(a)) return;
+    const last = this.applyOne(a, signData, phone, opinion);
     store.commit('审批申请', `${store.typeName(a)} · ${a.name} → ${a.status}`);
     this.setData({ signVisible: false });
     wx.showToast({ title: last ? '申请已通过' : '已流转下一节点', icon: 'none' });
+    this.refresh();
+  },
+
+  doBatch(ids, signData, phone, opinion) {
+    let passed = 0, advanced = 0;
+    ids.forEach((id) => {
+      const a = app.globalData.db.applies.find((x) => x.id === id);
+      if (!a || !store.canApprove(a)) return;
+      const last = this.applyOne(a, signData, phone, opinion);
+      last ? passed += 1 : advanced += 1;
+    });
+    store.commit('批量审批申请', `终审通过 ${passed} 条、流转下一节点 ${advanced} 条`);
+    this.setData({ signVisible: false });
+    wx.showToast({ title: `通过 ${passed} 条，流转 ${advanced} 条`, icon: 'none' });
     this.refresh();
   },
 

@@ -346,12 +346,14 @@ function exportPublicLeave(a, fmt, archive) {
   }
   commit(archive ? '导出公假证明存档' : '下载公假证明', `${a.proofNo} · ${a.name}（${ROLE_NAMES[cur.role]}）`);
 }
-function applyRow(a, review) {
+function applyRow(a, review, bulk) {
   const ministerApprover = cur.role === 'minister' && a.dept === cur.dept && !isMinisterApplicant(a);
   const canReview = allPower() || ministerApprover;
   const pending = ['待审核', '审核中', '待分派', '处理中'].includes(a.status);
   const stage0 = (a.stage || 0) === 0;
   const terminalRejected = ['已驳回', '已撤回', '已作废'].includes(a.status);
+  const bulkEligible = !!(bulk && review && pending && typeof canApprove === 'function' && canApprove(a));
+  const checkCell = bulkEligible ? `<td><input type="checkbox" class="review-check" data-review-check="${a.id}"></td>` : (bulk ? '<td></td>' : '');
   const withdrawable = !review && stage0 && pending;
   const deletable = !review && (stage0 || terminalRejected);
   const editable = !review && ['已驳回', '草稿'].includes(a.status);
@@ -371,7 +373,7 @@ function applyRow(a, review) {
     ops.push(`<button class="link-btn del" data-apply-reject="${a.id}">驳回</button>`);
   }
   const who = review ? `<td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>` : '<td></td>';
-  return `<tr>${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
+  return `<tr>${checkCell}${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
 }
 
 function bindApplyView() {
@@ -557,10 +559,16 @@ function renderJoin() {
     </div>` : ''}
     ${canReview ? `
     <div class="card">
-      <div class="card-head"><div><h2>待我审批</h2><div class="sub">共 ${reviewList.length} 条待处理申请</div></div></div>
+      <div class="card-head">
+        <div><h2>待我审批</h2><div class="sub">共 ${reviewList.length} 条待处理申请；仅当前节点有权审批的记录可勾选批量通过</div></div>
+        <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <button class="primary-btn light" id="reviewExport">导出列表</button>
+          <button class="primary-btn" id="reviewBulkPass" disabled>批量通过（0）</button>
+        </div>
+      </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>申请人</th><th>类型</th><th>部门</th><th>提交时间</th><th>状态</th><th>轨迹</th><th>操作</th></tr></thead>
-        <tbody>${reviewList.length ? reviewList.slice().reverse().map((a) => applyRow(a, true)).join('') : '<tr><td colspan="7" class="empty">暂无待审批申请</td></tr>'}</tbody>
+        <thead><tr><th style="width:38px"><input type="checkbox" id="reviewCheckAll"></th><th>申请人</th><th>类型</th><th>部门</th><th>提交时间</th><th>状态</th><th>轨迹</th><th>操作</th></tr></thead>
+        <tbody>${reviewList.length ? reviewList.slice().reverse().map((a) => applyRow(a, true, true)).join('') : '<tr><td colspan="8" class="empty">暂无待审批申请</td></tr>'}</tbody>
       </table></div>
     </div>` : ''}
     ${archiveView ? `
@@ -736,6 +744,97 @@ function renderJoin() {
       commit('删除入会申请记录', `${j.name} → ${j.dept}`); save(); render(); toast('入会申请记录已删除');
     };
   });
+
+  /* ---- 待我审批：批量勾选 / 一次签字批量通过 / 列表导出 ---- */
+  const reviewChecks = () => [...document.querySelectorAll('.review-check')];
+  const reviewAll = $('#reviewCheckAll');
+  const reviewBulk = $('#reviewBulkPass');
+  const reviewExport = $('#reviewExport');
+  const reviewPending = () => db.applies.filter((a) => ['待审核', '审核中', '待分派', '处理中'].includes(a.status));
+  const reviewVisible = () => cur.role === 'minister'
+    ? reviewPending().filter((a) => a.dept === cur.dept && !isMinisterApplicant(a))
+    : reviewPending();
+  const updateReviewBulk = () => {
+    const checked = document.querySelectorAll('.review-check:checked');
+    const n = checked.length;
+    if (reviewBulk) { reviewBulk.textContent = `批量通过（${n}）`; reviewBulk.disabled = n === 0; }
+    if (reviewAll) reviewAll.checked = n > 0 && n === reviewChecks().length;
+  };
+  reviewChecks().forEach((c) => { c.onchange = updateReviewBulk; });
+  if (reviewAll) reviewAll.onchange = () => { reviewChecks().forEach((c) => { c.checked = reviewAll.checked; }); updateReviewBulk(); };
+  if (reviewBulk) reviewBulk.onclick = () => {
+    const ids = reviewChecks().filter((c) => c.checked).map((c) => c.dataset.reviewCheck);
+    const eligible = ids.map((id) => db.applies.find((x) => x.id === id)).filter((a) => a && typeof canApprove === 'function' && canApprove(a));
+    if (!eligible.length) { toast('选中的记录在当前节点均无权审批'); return; }
+    if (eligible.length < ids.length) toast(`已自动排除 ${ids.length - eligible.length} 条当前节点不可审批的记录`);
+    openBulkApproveForm(eligible.map((a) => a.id));
+  };
+  if (reviewExport) reviewExport.onclick = () => {
+    const rows = reviewVisible().map((a) => [a.name, a.sno || '—', a.typeName, a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);
+    openExportPicker('待我审批列表_' + today(), ['申请人', '学号', '申请事项', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
+  };
+}
+
+/* ---- 批量审批弹窗：一次手写签字 / 意见，应用到全部选中记录 ---- */
+function openBulkApproveForm(ids) {
+  let signFile = '';
+  let canvasDirty = false;
+  const body = openForm({
+    title: `批量通过（${ids.length} 条）`,
+    hint: '同一份手写签字与审批意见将分别写入选中每条申请的审批轨迹和签字栏；仅限当前节点有权审批的记录。',
+    fields: [
+      { key: 'phone', label: '联系电话' },
+      { key: 'opinion', label: '审批意见', type: 'textarea' }
+    ],
+    extra: `<div class="field"><label>手写签字（可直接在线书写，或点“选择文件”上传签字图片）</label>
+      <canvas id="apCanvas" width="320" height="120" style="border:1px solid #d9e2ec;border-radius:8px;background:#fff;touch-action:none"></canvas>
+      <div class="row-actions" style="margin-top:8px">
+        <button type="button" class="link-btn" id="apClear">清除重写</button>
+        <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
+      </div></div>`,
+    onSubmit(d) {
+      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
+      let passed = 0, advanced = 0;
+      ids.forEach((id) => {
+        const a = db.applies.find((x) => x.id === id);
+        if (!a || typeof canApprove !== 'function' || !canApprove(a)) return;
+        const stages = applyStages(a);
+        const label = stages[a.stage] || '审批';
+        const last = a.stage >= stages.length - 1;
+        const signs = (a.approveSigns = a.approveSigns || []);
+        signs.push({ sign: signData, phone: d.phone || '', opinion: d.opinion || '', actor: cur.name, role: ROLE_NAMES[cur.role], action: label, time: today() });
+        if (a.stage === 0) { a.signMinister = signData; a.phoneMinister = d.phone || ''; }
+        else { a.signChair = signData; a.phoneChair = d.phone || ''; }
+        const note = (d.phone ? '电话：' + d.phone : '') + (d.opinion ? '；意见：' + d.opinion : '');
+        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: label + '通过', note, time: today() });
+        if (last) { a.status = a.type === 'feedback' ? '已答复' : '已通过'; applyApproved(a); passed += 1; }
+        else { a.stage += 1; a.status = a.type === 'feedback' ? '处理中' : '审核中'; advanced += 1; }
+        notifyStagePass(a, label, last ? '' : (stages[a.stage] || ''));
+      });
+      commit('批量审批申请', `终审通过 ${passed} 条、流转下一节点 ${advanced} 条，共处理 ${passed + advanced} 条`);
+      save(); render();
+      toast(`已批量处理：终审通过 ${passed} 条，流转下一节点 ${advanced} 条`);
+    }
+  });
+  const cv = body.querySelector('#apCanvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false;
+  const pos = (e) => { const r = cv.getBoundingClientRect(); const p = e.touches ? e.touches[0] : e; return { x: p.clientX - r.left, y: p.clientY - r.top }; };
+  cv.addEventListener('pointerdown', (e) => { drawing = true; canvasDirty = true; ctx.beginPath(); const p = pos(e); ctx.moveTo(p.x, p.y); });
+  cv.addEventListener('pointermove', (e) => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  const stop = () => { drawing = false; };
+  cv.addEventListener('pointerup', stop);
+  cv.addEventListener('pointerleave', stop);
+  body.querySelector('#apClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); canvasDirty = false; };
+  body.querySelector('#apSign').onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
+    const rd = new FileReader();
+    rd.onload = () => { signFile = rd.result; };
+    rd.readAsDataURL(f);
+  };
 }
 
 /* ---------------- 账号管理（管理员） ---------------- */

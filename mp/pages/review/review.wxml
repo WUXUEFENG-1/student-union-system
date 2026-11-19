@@ -1,8 +1,17 @@
 <view class="card">
-  <view class="card-head"><view class="card-title">待我审批（{{list.length}}）</view></view>
+  <view class="card-head">
+    <view class="card-title">待我审批（{{list.length}}）</view>
+    <view class="head-actions">
+      <text class="link-btn" bindtap="onExport">导出列表</text>
+      <text class="link-btn" bindtap="onBulk">批量通过（{{bulkCount}}）</text>
+    </view>
+  </view>
   <view wx:if="{{!list.length}}" class="empty">暂无待处理申请</view>
   <view class="row" wx:for="{{list}}" wx:key="id">
     <view class="row-main">
+      <view class="check-wrap">
+        <checkbox wx:if="{{item.can}}" checked="{{checked[item.id]}}" data-id="{{item.id}}" bindtap="toggleCheck" color="#1657a6" />
+      </view>
       <view>
         <view class="row-title">{{item.name}} · {{item.typeName}}</view>
         <view class="row-sub">{{item.dept}} · {{item.title}}</view>
@@ -22,7 +31,8 @@
 <!-- 手写签字审批弹窗 -->
 <view class="mask" wx:if="{{signVisible}}">
   <view class="sign-card">
-    <view class="card-title">审批签字</view>
+    <view class="card-title">{{bulkMode ? '批量通过签字' : '审批签字'}}</view>
+    <view class="form-hint" wx:if="{{bulkMode}}">同一份签字与意见将写入选中的 {{bulkIds.length}} 条申请</view>
     <canvas canvas-id="signCanvas" class="sign-canvas"
       bindtouchstart="sStart" bindtouchmove="sMove" bindtouchend="sEnd"></canvas>
     <view class="field">
