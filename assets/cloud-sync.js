@@ -20,10 +20,10 @@
 
   function iso() { return new Date().toISOString(); }
 
-  /* 带超时的 fetch：云端不可达时及时中断，避免请求一直挂起 */
+  /* 带超时的 fetch：云端不可达时及时中断；大快照（含内嵌图片）拉取放宽到 40 秒，回写 30 秒 */
   function fetchJSON(url, opts, ms) {
     const ctrl = new AbortController();
-    const timer = setTimeout(function () { ctrl.abort(); }, ms || 8000);
+    const timer = setTimeout(function () { ctrl.abort(); }, ms || 30000);
     opts = opts || {};
     opts.signal = ctrl.signal;
     return fetch(url, opts).finally(function () { clearTimeout(timer); });
@@ -37,7 +37,7 @@
   }
 
   function readRemote() {
-    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID + '&select=data,updated_at', { headers: HEADERS })
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID + '&select=data,updated_at', { headers: HEADERS }, 40000)
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
       .then(function (arr) { return Array.isArray(arr) && arr[0] ? arr[0] : null; });
   }
@@ -56,10 +56,17 @@
     return snap;
   }
 
+  /* 本地兜底落盘：快照超过浏览器 localStorage 配额时只在内存保留台账，不能让配额异常中断云端同步 */
+  function persistLocal() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* 配额超限：本会话以内存台账为准 */ }
+  }
+
   let readyResolve;
   const ready = new Promise(function (res) { readyResolve = res; });
   window.__syncReady = false;
   let readyFlag = false;
+  let remoteReached = false;
+  let localPersisted = false;
 
   function markReady() {
     if (readyFlag) return;
@@ -96,13 +103,13 @@
       return (row ? writeRemote(payload) : createRemote(payload)).then(function () {
         localStorage.removeItem(PENDING);
         try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
-        localStorage.setItem(STORE_KEY, JSON.stringify(db));
+        persistLocal();
         status('云端已连接 · 名单实时同步', true);
         return true;
       });
     }).catch(function () {
       localStorage.setItem(PENDING, '1');
-      status('云端离线 · 改动已暂存在本机', false);
+      status(remoteReached ? '连接中断 · 改动将在重连后同步' : '云端离线 · 改动已暂存在本机', false);
       return false;
     });
   }
@@ -153,29 +160,31 @@
     remote.__removed = mergeGone(local.__removed, remote.__removed);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
-    localStorage.setItem(STORE_KEY, JSON.stringify(db));
-    if (JSON.stringify(remote) !== before) pushLocal();
+    persistLocal();
+    localStorage.removeItem(PENDING);
+    if (localPersisted && JSON.stringify(remote) !== before) pushLocal();
   }
 
   function pullRemote() {
-    const pending = localStorage.getItem(PENDING) === '1';
-    const step = pending ? pushLocal() : Promise.resolve(true);
-    step.then(function (ok) {
-      if (!ok) { markReady(); return; }
-      return readRemote().then(function (row) {
-        if (!row || !row.data || !Array.isArray(row.data.members)) {
-          /* 云端还没有数据：把本机现有数据推上去建立首份副本 */
-          pushLocal();
-          status('云端已连接 · 已建立首份数据', true);
-          markReady();
-          return;
-        }
-        /* 初始拉取一律以云端为准：云端名单覆盖本机残留，避免已删除项复活、旧账号表残留 */
-        applyRemote(row);
-        status('云端已连接 · 名单实时同步', true);
+    localPersisted = !!localStorage.getItem(STORE_KEY);
+    /* 启动一律先拉云端：避免本地残留的“待推送”标记把大快照回写排在拉取之前，
+       导致读不到云端台账、空本地缓存无法登录。本地流水新增由 applyRemote 合并后再回推。 */
+    readRemote().then(function (row) {
+      remoteReached = true;
+      if (!row || !row.data || !Array.isArray(row.data.members)) {
+        pushLocal();
+        status('云端已连接 · 已建立首份数据', true);
         markReady();
-      });
-    }).catch(function () { status('云端离线 · 仅本机数据可用', false); markReady(); });
+        return;
+      }
+      applyRemote(row);
+      status('云端已连接 · 名单实时同步', true);
+      markReady();
+    }).catch(function () {
+      const hasLocal = !!localStorage.getItem(STORE_KEY);
+      status(hasLocal ? '云端离线 · 仅本机数据可用' : '云端离线 · 暂无可用台账', false);
+      markReady();
+    });
   }
 
   /* 对比上一份快照，记录被删除条目的墓碑：本地删除后，下次云端合并不再把旧副本并回来 */
@@ -220,8 +229,8 @@
     if (document.visibilityState === 'hidden' && localStorage.getItem(PENDING) === '1') pushLocal();
   });
 
-  /* 绝对兜底：云端再慢/再不可达，10 秒内一定放行登录，不再一直停在“正在连接云端” */
-  setTimeout(markReady, 10000);
+  /* 兜底：云端再慢/不可达，45 秒内一定放行登录；大快照拉取可能超过 10 秒，不能提前锁死空台账 */
+  setTimeout(markReady, 45000);
 
   if (typeof fetch === 'function') pullRemote();
   else { status('当前浏览器不支持联网同步', false); markReady(); }

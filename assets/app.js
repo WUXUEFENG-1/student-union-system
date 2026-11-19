@@ -117,10 +117,10 @@ function load() {
     }
   } catch (e) { /* 损坏则重建 */ }
   const fresh = JSON.parse(JSON.stringify(SEED));
-  localStorage.setItem(STORE_KEY, JSON.stringify(fresh));
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(fresh)); } catch (e) { /* 配额超限：仅内存兜底 */ }
   return normalize(fresh);
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(db)); }
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* 配额超限：本会话以内存台账为准 */ } }
 function uid(p) { return p + Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 4); }
 
 function log(action, detail = '') {
