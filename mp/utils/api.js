@@ -50,14 +50,53 @@ function mergePasswords(target, source) {
   });
 }
 
-/* 拉取云端；失败则回退本地缓存 */
+/* 流水类业务表：按唯一键双向合并，任一端新增都不丢失；同一条目取审批轨迹更完整的一方。
+   成员/账号/部门等主数据仍以本机为准。 */
+const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities', 'msgs'];
+function idOf(x) { return x.id || x.username || (x.name + '|' + x.date + '|' + (x.typeName || x.type || '')); }
+function newer(a, b) {
+  const ta = (a.track || []).length, tb = (b.track || []).length;
+  if (ta !== tb) return ta > tb ? a : b;
+  return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
+}
+function mergeUnionsInto(target, source, gone) {
+  gone = gone || {};
+  UNION_ARRAYS.forEach((k) => {
+    const tArr = Array.isArray(target[k]) ? target[k] : [];
+    const sArr = Array.isArray(source[k]) ? source[k] : [];
+    if (!tArr.length && !sArr.length) return;
+    const remIds = new Set(gone[k] || []);
+    const map = new Map();
+    tArr.forEach((x) => { const id = idOf(x); if (!remIds.has(id)) map.set(id, x); });
+    sArr.forEach((x) => {
+      const id = idOf(x);
+      if (remIds.has(id)) return;
+      map.set(id, map.has(id) ? newer(map.get(id), x) : x);
+    });
+    target[k] = Array.from(map.values());
+  });
+  return target;
+}
+function mergeGone(a, b) {
+  const out = Object.assign({}, a || {});
+  Object.keys(b || {}).forEach((k) => {
+    out[k] = Array.from(new Set([...(out[k] || []), ...((b || {})[k] || [])]));
+  });
+  return out;
+}
+
+/* 拉取云端；失败则回退本地缓存。拉取时把本机尚未上云的新增流水并进来，避免被旧快照覆盖 */
 async function loadState() {
   try {
     const arr = await request('GET', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=data,updated_at`);
     if (Array.isArray(arr) && arr[0] && arr[0].data) {
       const remote = arr[0].data;
       const local = readLocal();
-      if (local && local.accounts) mergePasswords(remote, local);
+      if (local && local.accounts) {
+        mergePasswords(remote, local);
+        mergeUnionsInto(remote, local, local.__removed || {});
+        remote.__removed = mergeGone(local.__removed, remote.__removed);
+      }
       writeLocal(remote);
       return remote;
     }
@@ -67,7 +106,8 @@ async function loadState() {
   }
 }
 
-/* 整份回写云端；失败仅保留本地，下次进入再补推 */
+/* 整份回写云端：以本机为底稿，流水表与云端并集合并，避免旧缓存把云端真实数据整段覆盖；
+   失败仅保留本地，下次进入再补推 */
 async function saveState(db) {
   writeLocal(db);
   try {
@@ -76,8 +116,14 @@ async function saveState(db) {
       const arr = await request('GET', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=data`);
       if (Array.isArray(arr) && arr[0] && arr[0].data) remote = arr[0].data;
     } catch (e) { remote = null; }
-    if (remote && remote.accounts) mergePasswords(db, remote);
-    const payload = { id: ROW_ID, data: db, updated_at: new Date().toISOString() };
+    const snap = JSON.parse(JSON.stringify(db));
+    if (remote && remote.accounts) {
+      const gone = mergeGone(snap.__removed, remote.__removed || {});
+      mergeUnionsInto(snap, remote, gone);
+      mergePasswords(snap, remote);
+      snap.__removed = gone;
+    }
+    const payload = { id: ROW_ID, data: snap, updated_at: new Date().toISOString() };
     await request('PATCH', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}`, payload);
   } catch (e) {
     try { wx.setStorageSync('__pendingPush', '1'); } catch (err) {}
