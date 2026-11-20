@@ -267,6 +267,35 @@ function openRejectForm(a) {
     }
   });
 }
+
+/* 批量驳回：统一原因，选中记录退回本人转为草稿 */
+function openBulkRejectForm(ids) {
+  openForm({
+    title: `批量驳回（${ids.length} 条）`,
+    hint: '统一填写驳回原因，选中记录将退回申请人本人转为草稿，修改后可重新提交。',
+    fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
+    onSubmit(d) {
+      const reason = d.note || '';
+      let n = 0;
+      ids.forEach((id) => {
+        const a = db.applies.find((x) => x.id === id);
+        if (!a) return;
+        if (typeof canApprove === 'function' && !canApprove(a)) return;
+        const stages = applyStages(a);
+        const curLabel = stages[a.stage || 0] || '审批';
+        a.status = '草稿';
+        a.stage = 0;
+        a.locked = false;
+        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回（退回本人，转草稿）', note: reason, time: today() });
+        sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被批量退回本人，请修改后重新提交。${reason ? '原因：' + reason : ''}`, { title: '申请驳回提醒' });
+        n += 1;
+      });
+      commit('批量驳回', `${n} 条：${reason}`);
+      save(); render();
+      toast(`已批量驳回 ${n} 条`);
+    }
+  });
+}
 /* 当前登录人收到的消息（按姓名投递，重名时以学号区分展示） */
 function myMsgs() {
   return (db.msgs || []).filter((m) => m.to === (cur ? cur.name : ''));
@@ -457,6 +486,16 @@ function bindApplyView() {
 let summaryTypeFilter = '全部';
 let summaryStatusFilter = '全部';
 let summaryDeptFilter = '全部';
+let reviewTypeFilter = '全部';
+let reviewDeptFilter = '全部';
+let reviewStatusFilter = '全部';
+/* 待我审批组合筛选判定（app6 重绘待办行时复用同一口径） */
+function reviewMatchFilter(a) {
+  if (reviewTypeFilter !== '全部' && a.typeName !== reviewTypeFilter) return false;
+  if (reviewDeptFilter !== '全部' && a.dept !== reviewDeptFilter) return false;
+  if (reviewStatusFilter !== '全部' && a.status !== reviewStatusFilter) return false;
+  return true;
+}
 function renderApplySummary() {
   db.applies = db.applies || [];
   const seeAll = allPower() || (cur.role === 'minister' && cur.dept === '秘书部');
@@ -561,7 +600,17 @@ function renderJoin() {
   const mine = db.applies.filter((a) => a.name === cur.name);
   const pending = db.applies.filter((a) => ['待审核', '审核中', '待分派', '处理中'].includes(a.status));
   const canReview = allPower() || cur.role === 'minister';
-  const reviewList = cur.role === 'minister' ? pending.filter((a) => a.dept === cur.dept && !isMinisterApplicant(a)) : pending;
+  const reviewBase = cur.role === 'minister' ? pending.filter((a) => a.dept === cur.dept && !isMinisterApplicant(a)) : pending;
+  const reviewTypeNames = ['全部', ...Array.from(new Set(reviewBase.map((a) => a.typeName)))];
+  const reviewDeptNames = ['全部', ...Array.from(new Set(reviewBase.map((a) => a.dept).filter(Boolean)))];
+  const reviewStatusNames = ['全部', ...Array.from(new Set(reviewBase.map((a) => a.status)))];
+  if (!reviewTypeNames.includes(reviewTypeFilter)) reviewTypeFilter = '全部';
+  if (!reviewDeptNames.includes(reviewDeptFilter)) reviewDeptFilter = '全部';
+  if (!reviewStatusNames.includes(reviewStatusFilter)) reviewStatusFilter = '全部';
+  let reviewList = reviewBase.filter(reviewMatchFilter);
+  const reviewTypeOpts = reviewTypeNames.map((t) => `<option ${t === reviewTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const reviewDeptOpts = reviewDeptNames.map((t) => `<option ${t === reviewDeptFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const reviewStatusOpts = reviewStatusNames.map((t) => `<option ${t === reviewStatusFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const archiveView = allPower() || ['minister', 'presidium', 'teacher'].includes(cur.role);
   const archiveList = db.applies.filter((a) => a.type === 'publicLeave' && ['已通过', '已作废'].includes(a.status));
   const legacy = cur.role === 'minister' ? db.joinRequests.filter((j) => j.dept === cur.dept) : db.joinRequests;
@@ -587,10 +636,14 @@ function renderJoin() {
     ${canReview ? `
     <div class="card">
       <div class="card-head">
-        <div><h2>待我审批</h2><div class="sub">共 ${reviewList.length} 条待处理申请；仅当前节点有权审批的记录可勾选批量通过</div></div>
+        <div><h2>待我审批</h2><div class="sub">共 ${reviewList.length} 条待处理申请；可按事项 / 部门 / 状态组合筛选，仅当前节点有权审批的记录可勾选批量操作</div></div>
         <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <button class="primary-btn light" id="reviewExport">导出列表</button>
+          <button class="primary-btn light del" id="reviewBulkReject" disabled>批量驳回（0）</button>
           <button class="primary-btn" id="reviewBulkPass" disabled>批量通过（0）</button>
+          <div class="field" style="min-width:180px"><label>申请事项</label><select id="reviewType">${reviewTypeOpts}</select></div>
+          <div class="field" style="min-width:150px"><label>部门</label><select id="reviewDept">${reviewDeptOpts}</select></div>
+          <div class="field" style="min-width:150px"><label>状态</label><select id="reviewStatus">${reviewStatusOpts}</select></div>
         </div>
       </div>
       <div class="table-wrap"><table>
@@ -776,25 +829,43 @@ function renderJoin() {
   const reviewChecks = () => [...document.querySelectorAll('.review-check')];
   const reviewAll = $('#reviewCheckAll');
   const reviewBulk = $('#reviewBulkPass');
+  const reviewBulkReject = $('#reviewBulkReject');
   const reviewExport = $('#reviewExport');
   const reviewPending = () => db.applies.filter((a) => ['待审核', '审核中', '待分派', '处理中'].includes(a.status));
-  const reviewVisible = () => cur.role === 'minister'
-    ? reviewPending().filter((a) => a.dept === cur.dept && !isMinisterApplicant(a))
-    : reviewPending();
+  const reviewVisible = () => {
+    let list = cur.role === 'minister'
+      ? reviewPending().filter((a) => a.dept === cur.dept && !isMinisterApplicant(a))
+      : reviewPending();
+    return list.filter(reviewMatchFilter);
+  };
   const updateReviewBulk = () => {
     const checked = document.querySelectorAll('.review-check:checked');
     const n = checked.length;
     if (reviewBulk) { reviewBulk.textContent = `批量通过（${n}）`; reviewBulk.disabled = n === 0; }
+    if (reviewBulkReject) { reviewBulkReject.textContent = `批量驳回（${n}）`; reviewBulkReject.disabled = n === 0; }
     if (reviewAll) reviewAll.checked = n > 0 && n === reviewChecks().length;
   };
   reviewChecks().forEach((c) => { c.onchange = updateReviewBulk; });
   if (reviewAll) reviewAll.onchange = () => { reviewChecks().forEach((c) => { c.checked = reviewAll.checked; }); updateReviewBulk(); };
+  const rType = $('#reviewType');
+  if (rType) rType.onchange = () => { reviewTypeFilter = rType.value; render(); };
+  const rDept = $('#reviewDept');
+  if (rDept) rDept.onchange = () => { reviewDeptFilter = rDept.value; render(); };
+  const rStatus = $('#reviewStatus');
+  if (rStatus) rStatus.onchange = () => { reviewStatusFilter = rStatus.value; render(); };
   if (reviewBulk) reviewBulk.onclick = () => {
     const ids = reviewChecks().filter((c) => c.checked).map((c) => c.dataset.reviewCheck);
     const eligible = ids.map((id) => db.applies.find((x) => x.id === id)).filter((a) => a && typeof canApprove === 'function' && canApprove(a));
     if (!eligible.length) { toast('选中的记录在当前节点均无权审批'); return; }
     if (eligible.length < ids.length) toast(`已自动排除 ${ids.length - eligible.length} 条当前节点不可审批的记录`);
     openBulkApproveForm(eligible.map((a) => a.id));
+  };
+  if (reviewBulkReject) reviewBulkReject.onclick = () => {
+    const ids = reviewChecks().filter((c) => c.checked).map((c) => c.dataset.reviewCheck);
+    const eligible = ids.map((id) => db.applies.find((x) => x.id === id)).filter((a) => a && typeof canApprove === 'function' && canApprove(a));
+    if (!eligible.length) { toast('选中的记录在当前节点均无权审批'); return; }
+    if (eligible.length < ids.length) toast(`已自动排除 ${ids.length - eligible.length} 条当前节点不可审批的记录`);
+    openBulkRejectForm(eligible.map((a) => a.id));
   };
   if (reviewExport) reviewExport.onclick = () => {
     const rows = reviewVisible().map((a) => [a.name, a.sno || '—', a.typeName, a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);

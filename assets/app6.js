@@ -568,6 +568,7 @@ function filterResignTodo() {
       const btn = tr.querySelector('[data-apply-view],[data-apply-pass],[data-apply-reject]');
       const a = btn && db.applies.find((x) => x.id === (btn.dataset.applyView || btn.dataset.applyPass || btn.dataset.applyReject));
       if (!a) return;
+      if (typeof reviewMatchFilter === 'function' && !reviewMatchFilter(a)) { tr.remove(); return; }
       if (!resignTodoVisible(a)) { tr.remove(); return; }
       kept += 1;
     });
@@ -587,6 +588,7 @@ render = function () {
       db.applies.forEach((a) => {
         if (!PENDING_STATUS6.includes(a.status)) return;
         if (tbody.querySelector(`[data-apply-view="${a.id}"]`)) return;
+        if (typeof reviewMatchFilter === 'function' && !reviewMatchFilter(a)) return;
         if (!canApprove(a)) return;
         const rowHtml = a.type === 'leaveclub' ? resignRow(a) : applyRow(a, true);
         tbody.insertAdjacentHTML('beforeend', rowHtml);
