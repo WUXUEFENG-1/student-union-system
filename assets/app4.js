@@ -966,7 +966,7 @@ function openBulkApproveForm(ids) {
     onSubmit: async (d) => {
       const rawSign = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
       if (!rawSign) { toast('请先手写签字或上传签字图片'); return; }
-      const signData = await shrinkImageDataUrl(rawSign, 480, 70);
+      const signData = await shrinkImageDataUrl(rawSign, 360, 65, 80);
       let passed = 0, advanced = 0;
       ids.forEach((id) => {
         const a = db.applies.find((x) => x.id === id);
@@ -1004,7 +1004,7 @@ function openBulkApproveForm(ids) {
     if (!f) return;
     if (f.size > 1024 * 1024) { toast('签字图片请控制在 1MB 以内'); return; }
     const rd = new FileReader();
-    rd.onload = async () => { signFile = await shrinkImageDataUrl(rd.result, 480, 70); };
+    rd.onload = async () => { signFile = await shrinkImageDataUrl(rd.result, 360, 65, 80); };
     rd.readAsDataURL(f);
   };
 }

@@ -144,7 +144,7 @@ const allPower = () => ['admin', 'teacher', 'presidium'].includes(cur.role);
 const isPublisher = () => ['admin', 'teacher', 'presidium', 'minister'].includes(cur.role);
 
 /* 图片压缩：把上传/采集的 base64 图片按最大宽度等比缩放并转 JPEG，避免大文件撑爆云端快照与本地配额 */
-function shrinkImageDataUrl(dataUrl, maxW, quality) {
+function shrinkImageDataUrl(dataUrl, maxW, quality, maxH) {
   maxW = maxW || 1000;
   quality = quality || 72;
   return new Promise((resolve) => {
@@ -152,7 +152,8 @@ function shrinkImageDataUrl(dataUrl, maxW, quality) {
     const img = new Image();
     img.onload = () => {
       try {
-        const scale = img.width > maxW ? maxW / img.width : 1;
+        let scale = img.width > maxW ? maxW / img.width : 1;
+        if (maxH && img.height * scale > maxH) scale = maxH / img.height;
         const c = document.createElement('canvas');
         c.width = Math.max(1, Math.round(img.width * scale));
         c.height = Math.max(1, Math.round(img.height * scale));

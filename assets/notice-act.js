@@ -216,14 +216,20 @@ renderNotice = function () {
       }
     });
 
-    body.querySelector('#nAttach').onchange = (e) => {
+    body.querySelector('#nAttach').onchange = async (e) => {
       const f = e.target.files[0];
       attach = { name: '', data: '' };
       if (!f) return;
       attach.name = f.name;
-      const rd = new FileReader();
-      rd.onload = () => { attach.data = rd.result; };
-      rd.readAsDataURL(f);
+      /* 图片类附件先压缩再入库，避免高清原图 base64 撑大单行快照、耗尽磁盘 IO 预算；文档/表格保持原件 */
+      const isImg = /\.(png|jpe?g)$/i.test(f.name || '');
+      if (isImg) {
+        await new Promise((res) => ntCompressImage(f, (data) => { attach.data = data || ''; res(); }));
+      } else {
+        const rd = new FileReader();
+        rd.onload = () => { attach.data = rd.result; };
+        rd.readAsDataURL(f);
+      }
     };
 
     body.querySelector('#nImgs').onchange = async (e) => {
