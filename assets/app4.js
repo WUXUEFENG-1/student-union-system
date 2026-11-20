@@ -455,16 +455,28 @@ function bindApplyView() {
 
 /* 申请事宜汇总：按事项查看申请人与审批轨迹；部长团仅看本部门（秘书部除外），主席团/指导教师/管理员查看全部 */
 let summaryTypeFilter = '全部';
+let summaryStatusFilter = '全部';
+let summaryDeptFilter = '全部';
 function renderApplySummary() {
   db.applies = db.applies || [];
   const seeAll = allPower() || (cur.role === 'minister' && cur.dept === '秘书部');
   const inScope = (a) => seeAll || (cur.role === 'minister' && a.dept === cur.dept);
   const list = db.applies.filter(inScope);
   const typeNames = ['全部', ...Array.from(new Set(list.map((a) => a.typeName)))];
+  const STATUS_ORDER = ['待审核', '审核中', '待分派', '处理中', '已通过', '已驳回', '已撤回', '已作废', '已撤销'];
+  const statusNames = ['全部', ...STATUS_ORDER.filter((s) => list.some((a) => a.status === s)), ...Array.from(new Set(list.map((a) => a.status))).filter((s) => !STATUS_ORDER.includes(s))];
+  const deptNames = ['全部', ...Array.from(new Set(list.map((a) => a.dept).filter(Boolean)))];
   if (!typeNames.includes(summaryTypeFilter)) summaryTypeFilter = '全部';
-  const shown = summaryTypeFilter === '全部' ? list : list.filter((a) => a.typeName === summaryTypeFilter);
+  if (!statusNames.includes(summaryStatusFilter)) summaryStatusFilter = '全部';
+  if (!deptNames.includes(summaryDeptFilter)) summaryDeptFilter = '全部';
+  let shown = list;
+  if (summaryTypeFilter !== '全部') shown = shown.filter((a) => a.typeName === summaryTypeFilter);
+  if (summaryStatusFilter !== '全部') shown = shown.filter((a) => a.status === summaryStatusFilter);
+  if (summaryDeptFilter !== '全部') shown = shown.filter((a) => a.dept === summaryDeptFilter);
   const scopeText = seeAll ? '可查看全部部门申请' : `仅可查看本部门（${esc(cur.dept)}）申请`;
   const optHtml = typeNames.map((t) => `<option ${t === summaryTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const statusOptHtml = statusNames.map((t) => `<option ${t === summaryStatusFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const deptOptHtml = deptNames.map((t) => `<option ${t === summaryDeptFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const canDel = ['admin', 'presidium'].includes(cur.role);
   const colSpan = canDel ? 9 : 8;
   const rows = shown.slice().reverse().map((a) => {
@@ -490,11 +502,13 @@ function renderApplySummary() {
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，按申请事项筛选，审批流程与轨迹全程留痕</div></div>
+        <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，可按事项 / 部门 / 状态组合筛选，审批流程与轨迹全程留痕</div></div>
         <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           ${bulkBtn}
           ${bulkPdfBtn}
-          <div class="field" style="min-width:220px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
+          <div class="field" style="min-width:180px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
+          <div class="field" style="min-width:150px"><label>部门</label><select id="summaryDept">${deptOptHtml}</select></div>
+          <div class="field" style="min-width:150px"><label>状态</label><select id="summaryStatus">${statusOptHtml}</select></div>
         </div>
       </div>
       <div class="table-wrap"><table>
@@ -504,6 +518,10 @@ function renderApplySummary() {
     </div>`;
   const sel = $('#summaryType');
   if (sel) sel.onchange = () => { summaryTypeFilter = sel.value; render(); };
+  const deptSel = $('#summaryDept');
+  if (deptSel) deptSel.onchange = () => { summaryDeptFilter = deptSel.value; render(); };
+  const statusSel = $('#summaryStatus');
+  if (statusSel) statusSel.onchange = () => { summaryStatusFilter = statusSel.value; render(); };
   if (canDel) {
     const checks = () => [...document.querySelectorAll('.summary-check')];
     const updateBulk = () => {
