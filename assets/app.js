@@ -106,6 +106,13 @@ function normalize(db) {
     m.gender = m.gender || ''; m.ethnicity = m.ethnicity || '汉族'; m.politics = m.politics || '';
     if (!m.account) { const acc = db.accounts.find((a) => a.name === m.name && (a.sno === m.sno || a.sno === '—')); if (acc) m.account = acc.username; }
   });
+  /* 在途流程记录的部门跟随成员当前台账；历史终态记录留痕不动 */
+  const PENDING = ['待审核', '审核中', '待分派', '处理中'];
+  const findMem = (name, sno) => (db.members || []).find((x) => x.name === name && (!sno || !x.sno || x.sno === '—' || sno === '—' || x.sno === sno));
+  (db.applies || []).forEach((a) => { if (PENDING.includes(a.status)) { const m = findMem(a.name, a.sno); if (m && m.dept) a.dept = m.dept; } });
+  (db.leaves || []).forEach((l) => { if (l.status === '待审核') { const m = findMem(l.applicant); if (m && m.dept) l.dept = m.dept; } });
+  (db.assessments || []).forEach((k) => { if (k.status === '待审核') { const m = findMem(k.target); if (m && m.dept) k.dept = m.dept; } });
+  (db.joinRequests || []).forEach((j) => { if (PENDING.includes(j.status)) { const m = findMem(j.name, j.sno); if (m && m.dept) j.dept = m.dept; } });
   return db;
 }
 function load() {
@@ -514,7 +521,8 @@ function pendingTasks() {
     const l = db.leaves.filter((x) => {
       if (x.status !== '待审核' || x.reviewer !== leaveReviewer) return false;
       if (cur.role === 'minister') {
-        const dept = x.dept || ((db.members || []).find((m) => m.name === x.applicant) || {}).dept;
+        const mem = (db.members || []).find((m) => m.name === x.applicant);
+        const dept = mem ? mem.dept : x.dept;
         return dept === cur.dept;
       }
       return true;

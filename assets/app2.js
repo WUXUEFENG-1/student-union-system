@@ -270,16 +270,25 @@ function renderPersonnel() {
             acc.title = newTitle; acc.dept = newDept;
             if (!['admin', 'teacher'].includes(acc.role)) acc.role = roleFromTitle(newTitle);
           }
-          /* 同步刷新该成员名下在途申请的部门/职务/角色，审批链与部门过滤跟随最新台账；历史终态记录留痕不动 */
+          /* 同步刷新该成员名下全部在途流程的部门/职务/角色，审批链与部门过滤跟随最新台账；历史终态记录留痕不动 */
           const PENDING_APPLY = ['待审核', '审核中', '待分派', '处理中'];
+          const samePerson = (rec) => rec.name === m.name && (!rec.sno || !m.sno || rec.sno === '—' || m.sno === '—' || rec.sno === m.sno);
           (db.applies || []).forEach((a) => {
-            const samePerson = a.name === m.name && (!a.sno || !m.sno || a.sno === '—' || m.sno === '—' || a.sno === m.sno);
-            if (samePerson && PENDING_APPLY.includes(a.status)) {
+            if (samePerson(a) && PENDING_APPLY.includes(a.status)) {
               a.dept = newDept; a.title = newTitle;
               a.applicantRole = acc ? acc.role : roleFromTitle(newTitle);
               /* 退会/公假链按职务分流：清空旧链，下次进入按新职务重建 */
               if (a.type === 'leaveclub' || a.type === 'publicLeave') a.flow = [];
             }
+          });
+          (db.leaves || []).forEach((l) => {
+            if (l.applicant === m.name && l.status === '待审核') l.dept = newDept;
+          });
+          (db.assessments || []).forEach((k) => {
+            if (k.target === m.name && k.status === '待审核') k.dept = newDept;
+          });
+          (db.joinRequests || []).forEach((j) => {
+            if (samePerson(j) && PENDING_APPLY.includes(j.status)) j.dept = newDept;
           });
           /* 调整的是当前登录人：立即刷新会话，避免本会话仍按旧职务走权限与审批链 */
           if (cur && cur.name === m.name && (!cur.sno || !m.sno || cur.sno === m.sno)) {
@@ -683,11 +692,10 @@ function renderNotice() {
 /* ---------------- 请假 ---------------- */
 const LEAVE_REVIEWER = { presidium: '责任教师', minister: '主席团', student: '部长/副部长' };
 function canSubmitLeave() { return ['presidium', 'minister', 'student'].includes(cur.role); }
-/* 请假记录归属部门：优先记录 dept，老数据按成员台账反查 */
+/* 请假记录归属部门：跟随申请人当前台账部门，老数据/已离职再回退记录快照部门 */
 function leaveDept(l) {
-  if (l.dept) return l.dept;
   const m = (db.members || []).find((x) => x.name === l.applicant);
-  return m ? m.dept : '';
+  return m ? m.dept : (l.dept || '');
 }
 function canReviewLeave(l) {
   if (l.status !== '待审核') return false;
@@ -713,7 +721,7 @@ function renderLeave() {
       <div class="table-wrap"><table>
         <thead><tr><th>申请人</th><th>身份</th><th>部门</th><th>类型</th><th>起止时间</th><th>事由</th><th>审核人</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>${visible.length ? visible.slice().reverse().map((l) => `
-          <tr><td><strong>${esc(l.applicant)}</strong></td><td>${esc(ROLE_NAMES[l.applicantRole] || l.applicantRole)}</td><td>${esc(l.dept)}</td>
+          <tr><td><strong>${esc(l.applicant)}</strong></td><td>${esc(ROLE_NAMES[l.applicantRole] || l.applicantRole)}</td><td>${esc(leaveDept(l))}</td>
             <td>${esc(l.type)}</td><td class="nowrap">${esc(l.start)}<br>${esc(l.end)}</td>
             <td>${esc(l.reason)}${l.attach ? (l.attachData ? `<div class="cell-sub">附件：<button class="link-btn" data-leave-file="${l.id}">${esc(l.attach)}</button></div>` : `<div class="cell-sub">附件：${esc(l.attach)}</div>`) : ''}${l.reviewNote ? `<div class="cell-sub">审核意见：${esc(l.reviewNote)}</div>` : ''}</td>
             <td>${esc(l.reviewer)}</td><td>${badge(l.status)}</td>
