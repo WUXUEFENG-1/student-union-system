@@ -78,9 +78,22 @@ function commit(action, detail) {
   api.saveState(g().db);
 }
 
+/* 取申请人当前台账中的部门/职务/角色；查不到回退申请快照，口径与网页端一致 */
+function applicantCurrent(a) {
+  const { db } = g();
+  const mem = (db.members || []).find((m) => m.name === a.name && (!a.sno || !m.sno || a.sno === '—' || m.sno === '—' || m.sno === a.sno))
+    || (db.members || []).find((m) => m.name === a.name);
+  if (mem) {
+    const acc = mem.account ? (db.accounts || []).find((x) => x.username === mem.account) : null;
+    return { dept: mem.dept, title: mem.title, role: acc ? acc.role : roleFromTitle(mem.title) };
+  }
+  return { dept: a.dept, title: a.title, role: a.applicantRole };
+}
+
 /* 申请链：部长/副部长申请人固定走 副主席 → 主席；其余走类型默认链 */
 function isMinisterApplicant(a) {
-  return a.applicantRole === 'minister' || ['部长', '副部长'].includes(a.title);
+  const c = applicantCurrent(a);
+  return c.role === 'minister' || ['部长', '副部长'].includes(c.title);
 }
 function applyStages(a) {
   const cfg = APPLY_STAGES[a.type] || [];

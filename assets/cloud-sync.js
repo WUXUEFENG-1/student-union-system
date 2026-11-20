@@ -157,6 +157,13 @@
         mergeUnionsInto(snap, remote, gone);
         mergePasswords(snap, remote);
         snap.__removed = gone;
+        /* 防御：本机为空种子台账（无成员、无普通账号）而云端有真实名单时，主数据保留云端，避免空台账把云端名单整份覆盖 */
+        const seedLike = !(snap.members || []).length && !(snap.accounts || []).filter((a) => !['admin', 'teacher'].includes(a.role)).length;
+        if (seedLike && (remote.members || []).length) {
+          snap.members = remote.members;
+          snap.accounts = remote.accounts;
+          if (remote.departments) snap.departments = remote.departments;
+        }
       }
       const payload = { id: ROW_ID, data: snap, updated_at: iso() };
       return writeRemoteRetry(payload, !row).then(function () {

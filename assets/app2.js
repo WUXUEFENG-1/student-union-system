@@ -257,14 +257,36 @@ function renderPersonnel() {
         ],
         values: { title: m.title, dept: m.dept },
         onSubmit(d) {
-          db.personnel.push({ id: uid('p'), name: m.name, action: '提升', from: m.title, to: d.title, operator: cur.name, date: today() });
-          m.title = d.title; m.dept = d.dept;
-          const acc = db.accounts.find((a) => a.username === m.account);
+          const newTitle = d.title;
+          const newDept = d.dept || m.dept;
+          db.personnel.push({ id: uid('p'), name: m.name, action: '提升', from: m.title, to: newTitle, operator: cur.name, date: today() });
+          m.title = newTitle; m.dept = newDept;
+          /* 账号三级回退匹配：账号绑定 → 姓名+学号 → 姓名；避免老成员未绑账号时职务部门不同步 */
+          let acc = db.accounts.find((a) => a.username === m.account)
+            || db.accounts.find((a) => a.name === m.name && (a.sno === m.sno || a.sno === '—' || m.sno === '—'))
+            || db.accounts.find((a) => a.name === m.name);
           if (acc) {
-            acc.title = d.title; acc.dept = d.dept;
-            if (acc.role !== 'admin') acc.role = roleFromTitle(d.title);
+            if (!m.account) m.account = acc.username;
+            acc.title = newTitle; acc.dept = newDept;
+            if (!['admin', 'teacher'].includes(acc.role)) acc.role = roleFromTitle(newTitle);
           }
-          commit('职务调整', `${m.name}：${m.title} → ${d.title}`); render(); toast('职务已调整');
+          /* 同步刷新该成员名下在途申请的部门/职务/角色，审批链与部门过滤跟随最新台账；历史终态记录留痕不动 */
+          const PENDING_APPLY = ['待审核', '审核中', '待分派', '处理中'];
+          (db.applies || []).forEach((a) => {
+            const samePerson = a.name === m.name && (!a.sno || !m.sno || a.sno === '—' || m.sno === '—' || a.sno === m.sno);
+            if (samePerson && PENDING_APPLY.includes(a.status)) {
+              a.dept = newDept; a.title = newTitle;
+              a.applicantRole = acc ? acc.role : roleFromTitle(newTitle);
+              /* 退会/公假链按职务分流：清空旧链，下次进入按新职务重建 */
+              if (a.type === 'leaveclub' || a.type === 'publicLeave') a.flow = [];
+            }
+          });
+          /* 调整的是当前登录人：立即刷新会话，避免本会话仍按旧职务走权限与审批链 */
+          if (cur && cur.name === m.name && (!cur.sno || !m.sno || cur.sno === m.sno)) {
+            cur.dept = newDept; cur.title = newTitle;
+            if (!['admin', 'teacher'].includes(cur.role)) cur.role = roleFromTitle(newTitle);
+          }
+          commit('职务调整', `${m.name}：${m.dept} · ${m.title} → ${newDept} · ${newTitle}`); render(); toast('职务已调整，相关在途申请已同步最新部门与职务');
         }
       });
     };

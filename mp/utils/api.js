@@ -85,19 +85,24 @@ function mergeGone(a, b) {
   return out;
 }
 
-/* 拉取云端；失败则回退本地缓存。拉取时把本机尚未上云的新增流水并进来，避免被旧快照覆盖 */
+/* 拉取云端；失败则回退本地缓存。拉取时把本机尚未上云的新增流水并进来，避免被旧快照覆盖；
+   若确实并入了本机新增/墓碑，回推云端落库，避免只留在本机、下次又被云端旧快照冲掉（对齐网页端 applyRemote）。 */
 async function loadState() {
   try {
     const arr = await request('GET', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=data,updated_at`);
     if (Array.isArray(arr) && arr[0] && arr[0].data) {
       const remote = arr[0].data;
       const local = readLocal();
+      let merged = false;
       if (local && local.accounts) {
         mergePasswords(remote, local);
+        const before = JSON.stringify(remote);
         mergeUnionsInto(remote, local, local.__removed || {});
         remote.__removed = mergeGone(local.__removed, remote.__removed);
+        merged = JSON.stringify(remote) !== before;
       }
       writeLocal(remote);
+      if (merged) { try { await saveState(remote); } catch (e) { /* 回推失败保留本地，下次 commit 再补 */ } }
       return remote;
     }
     return readLocal();
@@ -122,6 +127,13 @@ async function saveState(db) {
       mergeUnionsInto(snap, remote, gone);
       mergePasswords(snap, remote);
       snap.__removed = gone;
+      /* 防御：本机为空种子台账而云端有真实名单时，主数据保留云端，避免空台账覆盖 */
+      const seedLike = !(snap.members || []).length && !(snap.accounts || []).filter((a) => !['admin', 'teacher'].includes(a.role)).length;
+      if (seedLike && (remote.members || []).length) {
+        snap.members = remote.members;
+        snap.accounts = remote.accounts;
+        if (remote.departments) snap.departments = remote.departments;
+      }
     }
     const payload = { id: ROW_ID, data: snap, updated_at: new Date().toISOString() };
     await request('PATCH', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}`, payload);

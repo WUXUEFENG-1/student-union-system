@@ -14,6 +14,9 @@ App({
 
   async bootstrap() {
     let db = await api.loadState();
+    const local = api.readLocal();
+    /* 云端返回异常空台账时，先回退本地有效缓存；仅云端与本地都无台账时才用种子兜底，避免空种子覆盖真实数据 */
+    if ((!db || !db.accounts) && local && local.accounts) db = local;
     if (!db || !db.accounts) {
       db = require('./utils/seed');
     }

@@ -125,9 +125,20 @@ function applyTypesVisible() {
 function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
+/* 取申请人当前台账中的部门/职务/角色；台账查不到时回退申请快照，避免调部门后旧申请仍按旧职务定审批链 */
+function applicantCurrent(a) {
+  const mem = (db.members || []).find((m) => m.name === a.name && (!a.sno || !m.sno || a.sno === '—' || m.sno === '—' || m.sno === a.sno))
+    || (db.members || []).find((m) => m.name === a.name);
+  if (mem) {
+    const acc = mem.account ? (db.accounts || []).find((x) => x.username === mem.account) : null;
+    return { dept: mem.dept, title: mem.title, role: acc ? acc.role : roleFromTitle(mem.title) };
+  }
+  return { dept: a.dept, title: a.title, role: a.applicantRole };
+}
 /* 申请人为部长/副部长时，审批链固定为：副主席审核 → 主席审核；其余身份走各类型默认链 */
 function isMinisterApplicant(a) {
-  return a.applicantRole === 'minister' || ['部长', '副部长'].includes(a.title);
+  const c = applicantCurrent(a);
+  return c.role === 'minister' || ['部长', '副部长'].includes(c.title);
 }
 function applyStages(a) {
   const cfg = APPLY_TYPES[a.type];
