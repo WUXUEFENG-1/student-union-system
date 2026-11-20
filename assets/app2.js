@@ -683,16 +683,25 @@ function renderNotice() {
 /* ---------------- 请假 ---------------- */
 const LEAVE_REVIEWER = { presidium: '责任教师', minister: '主席团', student: '部长/副部长' };
 function canSubmitLeave() { return ['presidium', 'minister', 'student'].includes(cur.role); }
+/* 请假记录归属部门：优先记录 dept，老数据按成员台账反查 */
+function leaveDept(l) {
+  if (l.dept) return l.dept;
+  const m = (db.members || []).find((x) => x.name === l.applicant);
+  return m ? m.dept : '';
+}
 function canReviewLeave(l) {
   if (l.status !== '待审核') return false;
   const map = { teacher: '责任教师', presidium: '主席团', minister: '部长/副部长' };
-  return map[cur.role] === l.reviewer;
+  if (map[cur.role] !== l.reviewer) return false;
+  /* 部长只能审批本部门请假，不可跨部门审批 */
+  if (cur.role === 'minister' && leaveDept(l) !== cur.dept) return false;
+  return true;
 }
 
 function renderLeave() {
   const mine = db.leaves.filter((l) => l.applicant === cur.name);
   const visible = ['admin', 'presidium', 'teacher'].includes(cur.role) ? db.leaves
-    : cur.role === 'minister' ? db.leaves.filter((l) => l.reviewer === '部长/副部长' || l.applicant === cur.name)
+    : cur.role === 'minister' ? db.leaves.filter((l) => leaveDept(l) === cur.dept || l.applicant === cur.name)
     : mine;
 
   $('#views').innerHTML = `

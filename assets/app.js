@@ -511,10 +511,21 @@ function pendingTasks() {
   }
   const leaveReviewer = { teacher: '责任教师', presidium: '主席团', minister: '部长/副部长' }[cur.role];
   if (leaveReviewer) {
-    const l = db.leaves.filter((x) => x.status === '待审核' && x.reviewer === leaveReviewer).length;
+    const l = db.leaves.filter((x) => {
+      if (x.status !== '待审核' || x.reviewer !== leaveReviewer) return false;
+      if (cur.role === 'minister') {
+        const dept = x.dept || ((db.members || []).find((m) => m.name === x.applicant) || {}).dept;
+        return dept === cur.dept;
+      }
+      return true;
+    }).length;
     if (l) t.push(['请假待审核', l, 'leave']);
   }
-  const ap = (db.applies || []).filter((x) => ['待审核', '审核中', '待分派', '处理中'].includes(x.status)).length;
+  const ap = (db.applies || []).filter((x) => {
+    if (!['待审核', '审核中', '待分派', '处理中'].includes(x.status)) return false;
+    if (cur.role === 'minister') return x.dept === cur.dept;
+    return true;
+  }).length;
   if (ap && (allPower() || cur.role === 'minister')) t.push(['申请待审批', ap, 'join']);
   const todo = db.collects.filter((c) => c.status === '进行中' && !c.submissions.some((s) => s.name === cur.name)).length;
   if (todo && cur.role === 'student') t.push(['待填写信息收集', todo, 'collect']);
