@@ -268,33 +268,86 @@ function openRejectForm(a) {
   });
 }
 
-/* 批量驳回：统一原因，选中记录退回本人转为草稿 */
+/* 批量驳回：去向与单条一致——可退回上一流程节点，或退回本人转草稿；首节点记录只能退本人 */
 function openBulkRejectForm(ids) {
+  const recs = ids.map((id) => db.applies.find((x) => x.id === id)).filter(Boolean);
+  const canBackAny = recs.some((a) => (a.stage || 0) > 0);
+  const options = [];
+  if (canBackAny) options.push({ value: 'prev', label: '驳回到上一流程节点（交回上一节点重新审批）' });
+  options.push({ value: 'self', label: '驳回到本人（转为草稿，修改后重新提交）' });
   openForm({
     title: `批量驳回（${ids.length} 条）`,
-    hint: '统一填写驳回原因，选中记录将退回申请人本人转为草稿，修改后可重新提交。',
-    fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
+    hint: canBackAny ? '可统一退回上一审批节点重新审批，或退回申请人本人转草稿；首个审批节点的记录只能退回本人。' : '当前均为首个审批节点，只能退回申请人本人修改后重新提交。',
+    fields: [
+      { key: 'backTarget', label: '驳回去向', type: 'select', options },
+      { key: 'note', label: '驳回原因', type: 'textarea', required: true }
+    ],
     onSubmit(d) {
       const reason = d.note || '';
-      let n = 0;
-      ids.forEach((id) => {
-        const a = db.applies.find((x) => x.id === id);
-        if (!a) return;
+      let nBack = 0, nSelf = 0;
+      recs.forEach((a) => {
         if (typeof canApprove === 'function' && !canApprove(a)) return;
         const stages = applyStages(a);
-        const curLabel = stages[a.stage || 0] || '审批';
-        a.status = '草稿';
-        a.stage = 0;
-        a.locked = false;
-        a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回（退回本人，转草稿）', note: reason, time: today() });
-        sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被批量退回本人，请修改后重新提交。${reason ? '原因：' + reason : ''}`, { title: '申请驳回提醒' });
-        n += 1;
+        const curStage = a.stage || 0;
+        const curLabel = stages[curStage] || '审批';
+        const canBack = curStage > 0;
+        const prevLabel = canBack ? stages[curStage - 1] : '';
+        if (d.backTarget === 'prev' && canBack) {
+          a.stage = curStage - 1;
+          a.status = a.type === 'feedback' ? '处理中' : '审核中';
+          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: `退回【${prevLabel}】重新审批`, note: reason, time: today() });
+          sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被退回【${prevLabel}】，将由该节点重新审批。${reason ? '原因：' + reason : ''}`, { title: '申请退回提醒' });
+          nBack += 1;
+        } else {
+          a.status = '草稿';
+          a.stage = 0;
+          a.locked = false;
+          a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回（退回本人，转草稿）', note: reason, time: today() });
+          sendApplyMsg(a, `你的「${a.typeName}」在【${curLabel}】被批量退回本人，请修改后重新提交。${reason ? '原因：' + reason : ''}`, { title: '申请驳回提醒' });
+          nSelf += 1;
+        }
       });
-      commit('批量驳回', `${n} 条：${reason}`);
+      commit('批量驳回', `退回上一节点 ${nBack} 条、退回本人 ${nSelf} 条：${reason}`);
       save(); render();
-      toast(`已批量驳回 ${n} 条`);
+      toast(`已批量驳回：退回上一节点 ${nBack} 条，退回本人 ${nSelf} 条`);
     }
   });
+}
+
+/* 是否可撤销本人上一步通过：申请仍在途（未终审、未终止），且当前登录人是上一节点的通过人 */
+function canUndoApproval(a) {
+  if (!cur || !a) return false;
+  if (!['待审核', '审核中', '待分派', '处理中'].includes(a.status)) return false;
+  const stage = a.stage || 0;
+  if (stage <= 0) return false;
+  const stages = applyStages(a);
+  const prevLabel = stages[stage - 1];
+  if (!prevLabel) return false;
+  const mine = (a.track || []).filter((t) => t.action === prevLabel + '通过' && t.actor === cur.name).pop();
+  return !!mine;
+}
+
+/* 撤销本人审批通过：退回上一节点重新审批，移除该步轨迹与签字；终审已通过的不在此列 */
+function undoApproval(a) {
+  const stages = applyStages(a);
+  const stage = a.stage || 0;
+  const prevLabel = stages[stage - 1];
+  if (!prevLabel) return;
+  if (!confirm(`确定撤销你在【${prevLabel}】的审批通过？申请将退回该节点重新审批。`)) return;
+  const mine = (a.track || []).filter((t) => t.action === prevLabel + '通过' && t.actor === cur.name).pop();
+  if (mine) { const idx = a.track.lastIndexOf(mine); if (idx >= 0) a.track.splice(idx, 1); }
+  const signs = a.approveSigns || [];
+  const signIdx = [...signs].map((s, i) => (s.action === prevLabel && s.actor === cur.name ? i : -1)).filter((i) => i >= 0).pop();
+  if (signIdx != null) signs.splice(signIdx, 1);
+  if (stage - 1 === 0) { a.signMinister = ''; a.phoneMinister = ''; }
+  if (stage - 1 === 1) { a.signChair = ''; a.phoneChair = ''; }
+  a.stage = stage - 1;
+  a.status = a.type === 'feedback' ? '处理中' : '审核中';
+  a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: `撤销【${prevLabel}】审批`, note: '', time: today() });
+  sendApplyMsg(a, `你的「${a.typeName}」在【${prevLabel}】的审批已被撤销，将由该节点重新审批。`, { title: '审批撤销提醒' });
+  commit('撤销审批', `${a.typeName} · ${a.name} ← 撤销【${prevLabel}】`);
+  save(); render();
+  toast('已撤销该审批，申请退回上一节点');
 }
 /* 当前登录人收到的消息（按姓名投递，重名时以学号区分展示） */
 function myMsgs() {
@@ -521,6 +574,7 @@ function renderApplySummary() {
   const rows = shown.slice().reverse().map((a) => {
     const flow = applyStages(a).join(' → ');
     const ops = [`<button class="link-btn" data-apply-view="${a.id}">查看</button>`];
+    if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤销审批</button>`);
     if (canDel) ops.push(`<button class="link-btn del" data-apply-summary-del="${a.id}">删除</button>`);
     const checkCell = canDel ? `<td><input type="checkbox" class="summary-check" data-apply-check="${a.id}"></td>` : '';
     return `<tr>
@@ -797,6 +851,14 @@ function renderJoin() {
       const a = db.applies.find((x) => x.id === b.dataset.applyReject);
       if (!a) return;
       openRejectForm(a);
+    };
+  });
+  document.querySelectorAll('[data-apply-undo]').forEach((b) => {
+    b.onclick = () => {
+      const a = db.applies.find((x) => x.id === b.dataset.applyUndo);
+      if (!a) return;
+      if (!canUndoApproval(a)) { toast('该申请当前节点尚未处理或已终审，不可撤销'); return; }
+      undoApproval(a);
     };
   });
 
