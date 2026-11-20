@@ -454,7 +454,10 @@ function renderProfile() {
         if (d.p1.length < 6) { toast('新密码至少 6 位'); return; }
         if (d.p1 !== d.p2) { toast('两次输入的新密码不一致'); return; }
         acc.password = d.p1;
-        commit('修改密码', acc.username); save(); toast('密码已修改，请牢记新密码');
+        acc.pwdAt = new Date().toISOString();
+        commit('修改密码', acc.username); save();
+        if (typeof window.__flushSync === 'function') window.__flushSync();
+        toast('密码已修改，请牢记新密码');
       }
     });
   };

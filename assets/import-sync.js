@@ -37,7 +37,7 @@ importMembers = function (text) {
       if (account) {
         if (db.accounts.some((a) => a.username === account)) { messages.push(`第 ${idx + 1} 行账号「${account}」已存在，未重复创建`); }
         else if (!password || password.length < 6) { messages.push(`第 ${idx + 1} 行账号「${account}」初始密码不足 6 位，未创建登录账号`); }
-        else db.accounts.push({ username: account, password, name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+        else db.accounts.push({ username: account, password, pwdAt: new Date().toISOString(), name, role: roleFromTitle(titleName), dept: deptName, title: titleName, sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
       }
       added++;
     }

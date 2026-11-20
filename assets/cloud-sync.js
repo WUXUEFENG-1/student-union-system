@@ -87,6 +87,21 @@
     return out;
   }
 
+  function accKey(a) { return a && (a.username || a.account); }
+
+  /* 账号密码按 pwdAt 时间戳择优合并：较新修改的密码不被较旧快照覆盖；
+     没有 pwdAt 的历史记录视为最旧，只在对方无更新时间时被采纳。 */
+  function mergePasswords(target, source) {
+    const tMap = {};
+    (target.accounts || []).forEach(function (a) { const k = accKey(a); if (k) tMap[k] = a; });
+    (source.accounts || []).forEach(function (s) {
+      const k = accKey(s);
+      if (!k || !s.pwdAt) return;
+      const t = tMap[k];
+      if (t && (!t.pwdAt || s.pwdAt > t.pwdAt)) { t.password = s.password; t.pwdAt = s.pwdAt; }
+    });
+  }
+
   function pushLocal() {
     return readRemote().then(function (row) {
       /* 以本机快照为底稿推送：成员/账号/部门等主数据的增删改都以本机为准，
@@ -97,6 +112,7 @@
         /* 只把云端的流水记录并入本机，避免冲掉他人刚提交、本机尚未拉取的申请/日志 */
         const gone = mergeGone(snap.__removed, remote.__removed);
         mergeUnionsInto(snap, remote, gone);
+        mergePasswords(snap, remote);
         snap.__removed = gone;
       }
       const payload = { id: ROW_ID, data: snap, updated_at: iso() };
@@ -156,6 +172,8 @@
     const local = cleanSnapshot();
     const before = JSON.stringify(remote);
     mergeBoth(remote, local);
+    /* 本机较新的密码不被云端旧快照覆盖（按 pwdAt 择优） */
+    mergePasswords(remote, local);
     /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
     remote.__removed = mergeGone(local.__removed, remote.__removed);
     Object.keys(db).forEach(function (k) { delete db[k]; });

@@ -36,13 +36,30 @@ function writeLocal(db) {
   try { wx.setStorageSync(STORE_KEY, JSON.stringify(db)); } catch (e) {}
 }
 
+function accKey(a) { return a && (a.username || a.account); }
+
+/* 账号密码按 pwdAt 择优：较新修改的密码不被较旧快照覆盖 */
+function mergePasswords(target, source) {
+  const tMap = {};
+  (target.accounts || []).forEach((a) => { const k = accKey(a); if (k) tMap[k] = a; });
+  (source.accounts || []).forEach((s) => {
+    const k = accKey(s);
+    if (!k || !s.pwdAt) return;
+    const t = tMap[k];
+    if (t && (!t.pwdAt || s.pwdAt > t.pwdAt)) { t.password = s.password; t.pwdAt = s.pwdAt; }
+  });
+}
+
 /* 拉取云端；失败则回退本地缓存 */
 async function loadState() {
   try {
     const arr = await request('GET', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=data,updated_at`);
     if (Array.isArray(arr) && arr[0] && arr[0].data) {
-      writeLocal(arr[0].data);
-      return arr[0].data;
+      const remote = arr[0].data;
+      const local = readLocal();
+      if (local && local.accounts) mergePasswords(remote, local);
+      writeLocal(remote);
+      return remote;
     }
     return readLocal();
   } catch (e) {
@@ -53,8 +70,14 @@ async function loadState() {
 /* 整份回写云端；失败仅保留本地，下次进入再补推 */
 async function saveState(db) {
   writeLocal(db);
-  const payload = { id: ROW_ID, data: db, updated_at: new Date().toISOString() };
   try {
+    let remote = null;
+    try {
+      const arr = await request('GET', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=data`);
+      if (Array.isArray(arr) && arr[0] && arr[0].data) remote = arr[0].data;
+    } catch (e) { remote = null; }
+    if (remote && remote.accounts) mergePasswords(db, remote);
+    const payload = { id: ROW_ID, data: db, updated_at: new Date().toISOString() };
     await request('PATCH', `${SB_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}`, payload);
   } catch (e) {
     try { wx.setStorageSync('__pendingPush', '1'); } catch (err) {}

@@ -233,9 +233,10 @@ function openApproveForm(a) {
           <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
         </div>
       </div>`,
-    onSubmit(d) {
-      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
-      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
+    onSubmit: async (d) => {
+      const rawSign = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!rawSign) { toast('请先手写签字或上传签字图片'); return; }
+      const signData = await shrinkImageDataUrl(rawSign, 480, 70);
       if (needPhone && !d.phone) { toast('请填写联系电话'); return; }
       const signs = (a.approveSigns = a.approveSigns || []);
       signs.push({ sign: signData, phone: d.phone, opinion: d.opinion || '', actor: cur.name, role: ROLE_NAMES[cur.role], action: stageLabel, time: today() });
@@ -265,7 +266,7 @@ function openApproveForm(a) {
   body.querySelector('#apSign').onchange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
+    if (f.size > 1024 * 1024) { toast('签字图片请控制在 1MB 以内'); return; }
     const rd = new FileReader();
     rd.onload = async () => { signFile = await shrinkImageDataUrl(rd.result, 480, 70); };
     rd.readAsDataURL(f);

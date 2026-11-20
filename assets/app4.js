@@ -819,9 +819,10 @@ function openBulkApproveForm(ids) {
         <button type="button" class="link-btn" id="apClear">清除重写</button>
         <input type="file" id="apSign" accept="image/png,image/jpeg,image/jpg" class="file-input">
       </div></div>`,
-    onSubmit(d) {
-      const signData = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
-      if (!signData) { toast('请先手写签字或上传签字图片'); return; }
+    onSubmit: async (d) => {
+      const rawSign = signFile || (canvasDirty ? body.querySelector('#apCanvas').toDataURL('image/png') : '');
+      if (!rawSign) { toast('请先手写签字或上传签字图片'); return; }
+      const signData = await shrinkImageDataUrl(rawSign, 480, 70);
       let passed = 0, advanced = 0;
       ids.forEach((id) => {
         const a = db.applies.find((x) => x.id === id);
@@ -857,7 +858,7 @@ function openBulkApproveForm(ids) {
   body.querySelector('#apSign').onchange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (f.size > 512 * 1024) { toast('签字图片请控制在 512KB 以内'); return; }
+    if (f.size > 1024 * 1024) { toast('签字图片请控制在 1MB 以内'); return; }
     const rd = new FileReader();
     rd.onload = async () => { signFile = await shrinkImageDataUrl(rd.result, 480, 70); };
     rd.readAsDataURL(f);
@@ -957,7 +958,7 @@ function renderAccounts() {
         if (db.accounts.some((a) => a.username === d.username)) { toast('用户名已存在'); return; }
         const role = ROLE_KEY_FROM_LABEL[d.role];
         const deptName = d.dept || '未加入';
-        db.accounts.push({ username: d.username, password: d.password, name: d.name, role, dept: deptName, title: d.title, sno: d.sno || '', class: d.class || '', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
+        db.accounts.push({ username: d.username, password: d.password, pwdAt: new Date().toISOString(), name: d.name, role, dept: deptName, title: d.title, sno: d.sno || '', class: d.class || '', phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics });
         if (deptName !== '未加入' && !db.members.some((m) => m.name === d.name && m.sno === d.sno)) {
           db.members.push({ id: uid('m'), name: d.name, sno: d.sno || '—', class: d.class || '—', dept: deptName, title: d.title, phone: d.phone || '', gender: d.gender, ethnicity: d.ethnicity || '汉族', politics: d.politics, account: d.username, status: '在任', joined: today() });
         }
@@ -979,6 +980,7 @@ function renderAccounts() {
           if (d.p1.length < 6) { toast('密码至少 6 位'); return; }
           if (d.p1 !== d.p2) { toast('两次输入不一致'); return; }
           a.password = d.p1;
+          a.pwdAt = new Date().toISOString();
           commit('重置密码', a.username); save(); render(); toast('密码已重置');
         }
       });
@@ -1018,7 +1020,7 @@ function importAccounts(text) {
       updated++;
       messages.push(`第 ${idx + 1} 行「${username}」已按表同步更新`);
     } else {
-      db.accounts.push({ username, password, name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
+      db.accounts.push({ username, password, pwdAt: new Date().toISOString(), name, role, dept: deptName, title: titleName, sno: profile.sno, class: profile.class, phone: profile.phone, gender: profile.gender, ethnicity: profile.ethnicity, politics: profile.politics });
       let mem = db.members.find((m) => m.account === username) || db.members.find((m) => m.sno === profile.sno && m.name === name);
       if (mem) Object.assign(mem, profile, { title: titleName, account: username, status: mem.status || '在任' });
       else db.members.push(Object.assign({ id: uid('m'), account: username, title: titleName, status: '在任', joined: today() }, profile));

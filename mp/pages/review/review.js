@@ -126,11 +126,13 @@ Page({
   confirmSign() {
     wx.canvasToTempFilePath({
       canvasId: 'signCanvas',
+      fileType: 'jpg',
+      quality: 0.7,
       success: (res) => {
         wx.getFileSystemManager().readFile({
           filePath: res.tempFilePath, encoding: 'base64',
           success: (r) => {
-            const signData = `data:image/png;base64,${r.data}`;
+            const signData = `data:image/jpeg;base64,${r.data}`;
             const { opinion, phone, bulkMode, bulkIds, signId } = this.data;
             if (bulkMode) this.doBatch(bulkIds, signData, phone, opinion);
             else this.doPass(signId, signData, phone, opinion);
