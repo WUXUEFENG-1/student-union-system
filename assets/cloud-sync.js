@@ -38,16 +38,59 @@
 
   function readRemote() {
     return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID + '&select=data,updated_at', { headers: HEADERS }, 40000)
-      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (r) {
+        if (!r.ok) {
+          /* 57014=语句超时、500/502/503/504=网关或服务端抖动：属于可重试的临时故障 */
+          const err = new Error('http ' + r.status);
+          err.status = r.status;
+          throw err;
+        }
+        return r.json();
+      })
       .then(function (arr) { return Array.isArray(arr) && arr[0] ? arr[0] : null; });
   }
 
+  /* 拉取重试：大快照在云端偶发语句超时/网关抖动，单次失败不应直接判离线 */
+  const RETRY_DELAYS = [1200, 2500, 4000, 6000];
+  function isRetryable(err) {
+    if (!err) return true;
+    if (err.name === 'AbortError') return true;
+    if (err.status) return err.status >= 500 || err.status === 429;
+    return true; /* 网络层错误（断网、DNS、CORS）同样重试 */
+  }
+  function readRemoteRetry(attempt) {
+    attempt = attempt || 0;
+    return readRemote().catch(function (err) {
+      if (attempt >= RETRY_DELAYS.length || !isRetryable(err)) throw err;
+      return new Promise(function (res) { setTimeout(res, RETRY_DELAYS[attempt]); })
+        .then(function () { return readRemoteRetry(attempt + 1); });
+    });
+  }
+
   function createRemote(payload) {
-    return fetchJSON(SB_URL + '/rest/v1/' + TABLE, { method: 'POST', headers: HEADERS, body: JSON.stringify(payload) });
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE, { method: 'POST', headers: HEADERS, body: JSON.stringify(payload) }, 60000);
   }
 
   function writeRemote(payload) {
-    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(payload) });
+    return fetchJSON(SB_URL + '/rest/v1/' + TABLE + '?id=eq.' + ROW_ID, { method: 'PATCH', headers: HEADERS, body: JSON.stringify(payload) }, 60000);
+  }
+
+  /* 回写重试：整份快照 PATCH 偶发语句超时，PATCH 为幂等覆盖，可安全重试 */
+  function writeRemoteRetry(payload, create, attempt) {
+    attempt = attempt || 0;
+    const body = { id: payload.id, data: payload.data, updated_at: payload.updated_at };
+    const doCall = function () { return create ? createRemote(body) : writeRemote(body); };
+    return doCall().then(function (r) {
+      /* 409 = 并发下记录已存在，等同写入成功 */
+      if (r && !r.ok && r.status !== 409) {
+        const err = new Error('http ' + r.status); err.status = r.status; throw err;
+      }
+      return r;
+    }).catch(function (err) {
+      if (attempt >= 2 || (err.status && err.status < 500)) throw err;
+      return new Promise(function (res) { setTimeout(res, RETRY_DELAYS[attempt] || 4000); })
+        .then(function () { return writeRemoteRetry(payload, create, attempt + 1); });
+    });
   }
 
   function cleanSnapshot() {
@@ -103,7 +146,7 @@
   }
 
   function pushLocal() {
-    return readRemote().then(function (row) {
+    return readRemoteRetry().then(function (row) {
       /* 以本机快照为底稿推送：成员/账号/部门等主数据的增删改都以本机为准，
          否则「以云端为底稿」会把刚删除的成员、刚改的密码瞬间覆盖回旧值。 */
       let snap = cleanSnapshot();
@@ -116,16 +159,20 @@
         snap.__removed = gone;
       }
       const payload = { id: ROW_ID, data: snap, updated_at: iso() };
-      return (row ? writeRemote(payload) : createRemote(payload)).then(function () {
+      return writeRemoteRetry(payload, !row).then(function () {
         localStorage.removeItem(PENDING);
         try { db[FLAG] = payload.updated_at; } catch (e) { /* 忽略 */ }
         persistLocal();
+        remoteReached = true;
         status('云端已连接 · 名单实时同步', true);
+        stopReconnect();
         return true;
       });
-    }).catch(function () {
+    }).catch(function (err) {
       localStorage.setItem(PENDING, '1');
-      status(remoteReached ? '连接中断 · 改动将在重连后同步' : '云端离线 · 改动已暂存在本机', false);
+      const http = err && err.status ? `HTTP ${err.status}` : '网络中断';
+      status(remoteReached ? '连接中断 · 改动将在重连后同步' : `云端离线 · 改动已暂存本机（${http}）`, false);
+      scheduleReconnect();
       return false;
     });
   }
@@ -187,8 +234,9 @@
     localPersisted = !!localStorage.getItem(STORE_KEY);
     /* 启动一律先拉云端：避免本地残留的“待推送”标记把大快照回写排在拉取之前，
        导致读不到云端台账、空本地缓存无法登录。本地流水新增由 applyRemote 合并后再回推。 */
-    readRemote().then(function (row) {
+    readRemoteRetry().then(function (row) {
       remoteReached = true;
+      stopReconnect();
       if (!row || !row.data || !Array.isArray(row.data.members)) {
         pushLocal();
         status('云端已连接 · 已建立首份数据', true);
@@ -198,11 +246,47 @@
       applyRemote(row);
       status('云端已连接 · 名单实时同步', true);
       markReady();
-    }).catch(function () {
+    }).catch(function (err) {
       const hasLocal = !!localStorage.getItem(STORE_KEY);
-      status(hasLocal ? '云端离线 · 仅本机数据可用' : '云端离线 · 暂无可用台账', false);
+      const http = err && err.status ? `（HTTP ${err.status}，云端响应超时）` : '（网络不可达）';
+      status(hasLocal ? `云端离线 · 仅本机数据可用${http}` : `云端离线 · 暂无可用台账${http}`, false);
       markReady();
+      scheduleReconnect();
     });
+  }
+
+  /* ---------- 自动重连：离线后不再必须刷新页面，恢复网络/云端负载回落后自动拉回 ----------
+   * 间隔 8 秒起、逐步放宽到 60 秒；切到后台暂停，回到前台立即补一次。 */
+  let reconnectTimer = null;
+  let reconnectCount = 0;
+
+  function stopReconnect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectCount = 0;
+  }
+
+  function scheduleReconnect(delay) {
+    if (reconnectTimer) return; /* 已在排队，避免叠加多个定时器 */
+    const wait = delay || Math.min(8000 + reconnectCount * 4000, 60000);
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      if (document.visibilityState === 'hidden') { scheduleReconnect(30000); return; }
+      reconnectCount += 1;
+      readRemoteRetry().then(function (row) {
+        remoteReached = true;
+        reconnectCount = 0;
+        if (!row || !row.data) { scheduleReconnect(); return; }
+        applyRemote(row);
+        status('云端已连接 · 名单实时同步', true);
+        stopReconnect();
+        if (localStorage.getItem(PENDING) === '1') pushLocal();
+        /* 登录后重连成功：重绘当前页面，让拉回的最新台账立即生效 */
+        try { if (cur && typeof render === 'function') render(); } catch (e) { /* 忽略 */ }
+      }).catch(function () {
+        status('云端离线 · 正在自动重试连接…', false);
+        scheduleReconnect();
+      });
+    }, wait);
   }
 
   /* 对比上一份快照，记录被删除条目的墓碑：本地删除后，下次云端合并不再把旧副本并回来 */
@@ -244,7 +328,15 @@
 
   /* 手机切后台/锁屏时页面常被直接回收，hidden 阶段再尽力推一次，避免提交后未上云即被挂起 */
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden' && localStorage.getItem(PENDING) === '1') pushLocal();
+    if (document.visibilityState === 'hidden') {
+      if (localStorage.getItem(PENDING) === '1') pushLocal();
+      return;
+    }
+    /* 回到前台：若此前离线或仍有改动未上云，立即补一次连接 */
+    if (!remoteReached || localStorage.getItem(PENDING) === '1') {
+      stopReconnect();
+      scheduleReconnect(800);
+    }
   });
 
   /* 兜底：云端再慢/不可达，45 秒内一定放行登录；大快照拉取可能超过 10 秒，不能提前锁死空台账 */
