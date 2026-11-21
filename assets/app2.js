@@ -643,7 +643,7 @@ function renderNotice() {
       <div class="notice-list">${list.map((n) => `
         <div class="notice-item">
           <h4><span class="badge blue">${esc(n.type)}</span>${esc(n.title)}</h4>
-          <p>${esc(n.content)}</p>
+          <div class="notice-body">${typeof fmtNoticeBody === 'function' ? fmtNoticeBody(n.content, n.images) : `<p>${esc(n.content)}</p>`}</div>
           ${n.attach ? `<div class="cell-sub" style="margin:4px 0">附件：<button class="link-btn" data-notice-file="${n.id}">${esc(n.attach)}</button></div>` : ''}
           <div class="notice-meta" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
             <span>${esc(n.date)} · ${esc(n.publisherName)}（${esc(n.publisher)}）${n.scope && n.scope !== '全员' ? ` · 范围：${esc(n.scope)}` : ''}</span>
