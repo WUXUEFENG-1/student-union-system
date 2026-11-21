@@ -254,14 +254,15 @@ function buildTableHtml(headers, rows) {
   return `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:'Microsoft YaHei',sans-serif;font-size:13px;width:100%"><thead><tr>${th}</tr></thead><tbody>${trs || empty}</tbody></table>`;
 }
 
-function exportTable(format, filename, headers, rows) {
+function exportTable(format, filename, headers, rows, title) {
   rows = rows || [];
+  const docTitle = title || filename;
   if (format === 'csv') return exportCsv(filename, headers, rows);
 
   if (format === 'excel') {
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
       <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-      <body><h3 style="font-family:'Microsoft YaHei',sans-serif">${esc(filename)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
+      <body><h3 style="font-family:'Microsoft YaHei',sans-serif">${esc(docTitle)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
     downloadBlob(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' }), filename + '.xls');
     toast('已导出 Excel：' + filename + '.xls');
     return;
@@ -270,7 +271,7 @@ function exportTable(format, filename, headers, rows) {
   if (format === 'word') {
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
       <head><meta charset="UTF-8"><style>body{font-family:'Microsoft YaHei',sans-serif}h3{font-size:16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:6px;font-size:13px}th{background:#eef3fb}</style></head>
-      <body><h3>${esc(filename)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
+      <body><h3>${esc(docTitle)}</h3>${buildTableHtml(headers, rows)}</body></html>`;
     downloadBlob(new Blob(['\ufeff' + html], { type: 'application/msword;charset=utf-8' }), filename + '.doc');
     toast('已导出 Word：' + filename + '.doc');
     return;

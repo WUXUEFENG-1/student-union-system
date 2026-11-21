@@ -339,6 +339,14 @@ function rebindApplyView() {
       if (a) openApplyInfo(a);
     };
   });
+  document.querySelectorAll('[data-apply-undo]').forEach((btn) => {
+    btn.onclick = () => {
+      const a = db.applies.find((x) => x.id === btn.dataset.applyUndo);
+      if (!a) return;
+      if (typeof canUndoApproval === 'function' && !canUndoApproval(a)) { toast('该申请当前节点尚未处理或已终审，不可撤销'); return; }
+      undoApproval(a);
+    };
+  });
 }
 
 /* 部门台账兜底：成员中存在、但部门信息表缺失的部门，按部长/主席补齐记录 */

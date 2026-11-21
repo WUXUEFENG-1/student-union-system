@@ -470,6 +470,7 @@ function applyRow(a, review, bulk) {
     ops.push(`<button class="link-btn" data-apply-pass="${a.id}">通过</button>`);
     ops.push(`<button class="link-btn del" data-apply-reject="${a.id}">驳回</button>`);
   }
+  if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤销审批</button>`);
   const who = review ? `<td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>` : '<td></td>';
   return `<tr>${checkCell}${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
 }
@@ -673,7 +674,9 @@ function renderApplySummary() {
       const hours = (v.hours != null && v.hours !== '') ? v.hours : '—';
       return [a.name, a.sno || '—', a.class || '—', hours, a.typeName, applyBrief(a), a.dept, a.title || '成员', a.date || '', a.status];
     });
-    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '班级', '时长', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态'], rows);
+    const typeLabel = summaryTypeFilter === '全部' ? '全部' : summaryTypeFilter;
+    const docTitle = `云南工业信息职业学院应用经济系学生会学生申请事宜汇总（${typeLabel}）（${today()}）`;
+    exportTable('excel', `申请事宜汇总_${typeLabel}_${today()}`, ['申请人', '学号', '班级', '时长', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态'], rows, docTitle);
   };
   bindApplyView();
 }
