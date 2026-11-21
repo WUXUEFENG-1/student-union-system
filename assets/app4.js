@@ -125,13 +125,10 @@ function applyTypesVisible() {
 function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
-/* 申请对应的活动简介：志愿取活动名称+简介，公假取活动名称，兜底说明/理由/标题 */
+/* 申请对应的活动名称：志愿取活动名称，公假取活动名称，不附简介说明 */
 function applyBrief(a) {
   const v = a.values || {};
-  const name = v.activityName || v.activity || '';
-  const brief = (v.brief && v.brief !== '无') ? v.brief : '';
-  const text = [name, brief].filter(Boolean).join('｜');
-  return text || v.explanation || v.reason || v.title || '—';
+  return v.activityName || v.activity || '—';
 }
 /* 取申请人当前台账中的部门/职务/角色；台账查不到时回退申请快照，避免调部门后旧申请仍按旧职务定审批链 */
 function applicantCurrent(a) {
