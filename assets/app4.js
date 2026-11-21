@@ -645,8 +645,8 @@ function renderApplySummary() {
       <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div><div class="cell-sub">${esc(a.class || '—')}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
       <td><div class="cell-sub">${esc(applyBrief(a))}</div></td>
-      <td>${esc(a.dept)}</td>
-      <td>${esc(a.title || '成员')}</td>
+      <td class="nowrap">${esc(a.dept)}</td>
+      <td class="nowrap">${esc(a.title || '成员')}</td>
       <td class="nowrap">${esc(a.date)}</td>
       <td>${badge(a.status)}</td>
       <td><div class="cell-sub">${esc(flow)}</div><div class="cell-sub">${esc(applyTrackHtml(a))}</div></td>
@@ -671,7 +671,7 @@ function renderApplySummary() {
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr>${headCheck}<th>申请人</th><th>申请事项</th><th>活动简介</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
+        <thead><tr>${headCheck}<th>申请人</th><th style="min-width:150px">申请事项</th><th>活动简介</th><th style="min-width:92px">部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="${colSpan}" class="empty">暂无申请记录</td></tr>`}</tbody>
       </table></div>
     </div>`;
