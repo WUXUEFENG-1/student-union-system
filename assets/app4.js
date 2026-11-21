@@ -598,7 +598,7 @@ function renderApplySummary() {
     const checkCell = canDel ? `<td><input type="checkbox" class="summary-check" data-apply-check="${a.id}"></td>` : '';
     return `<tr>
       ${checkCell}
-      <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
+      <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div><div class="cell-sub">${esc(a.class || '—')}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
       <td><div class="cell-sub">${esc(applyBrief(a))}</div></td>
       <td>${esc(a.dept)}</td>
@@ -671,8 +671,12 @@ function renderApplySummary() {
   const excelEl = $('#summaryExportExcel');
   if (excelEl) excelEl.onclick = () => {
     if (!shown.length) { toast('当前筛选条件下无可导出的记录'); return; }
-    const rows = shown.slice().reverse().map((a) => [a.name, a.sno || '—', a.typeName, applyBrief(a), a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);
-    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
+    const rows = shown.slice().reverse().map((a) => {
+      const v = a.values || {};
+      const hours = (v.hours != null && v.hours !== '') ? v.hours : '—';
+      return [a.name, a.sno || '—', a.class || '—', hours, a.typeName, applyBrief(a), a.dept, a.title || '成员', a.date || '', a.status];
+    });
+    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '班级', '时长', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态'], rows);
   };
   bindApplyView();
 }
