@@ -125,6 +125,14 @@ function applyTypesVisible() {
 function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
+/* 申请对应的活动简介：志愿取活动名称+简介，公假取活动名称，兜底说明/理由/标题 */
+function applyBrief(a) {
+  const v = a.values || {};
+  const name = v.activityName || v.activity || '';
+  const brief = (v.brief && v.brief !== '无') ? v.brief : '';
+  const text = [name, brief].filter(Boolean).join('｜');
+  return text || v.explanation || v.reason || v.title || '—';
+}
 /* 取申请人当前台账中的部门/职务/角色；台账查不到时回退申请快照，避免调部门后旧申请仍按旧职务定审批链 */
 function applicantCurrent(a) {
   const mem = (db.members || []).find((m) => m.name === a.name && (!a.sno || !m.sno || a.sno === '—' || m.sno === '—' || m.sno === a.sno))
@@ -581,7 +589,7 @@ function renderApplySummary() {
   const statusOptHtml = statusNames.map((t) => `<option ${t === summaryStatusFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const deptOptHtml = deptNames.map((t) => `<option ${t === summaryDeptFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const canDel = ['admin', 'presidium'].includes(cur.role);
-  const colSpan = canDel ? 9 : 8;
+  const colSpan = canDel ? 10 : 9;
   const rows = shown.slice().reverse().map((a) => {
     const flow = applyStages(a).join(' → ');
     const ops = [`<button class="link-btn" data-apply-view="${a.id}">查看</button>`];
@@ -592,6 +600,7 @@ function renderApplySummary() {
       ${checkCell}
       <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
+      <td><div class="cell-sub">${esc(applyBrief(a))}</div></td>
       <td>${esc(a.dept)}</td>
       <td>${esc(a.title || '成员')}</td>
       <td class="nowrap">${esc(a.date)}</td>
@@ -618,7 +627,7 @@ function renderApplySummary() {
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr>${headCheck}<th>申请人</th><th>申请事项</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
+        <thead><tr>${headCheck}<th>申请人</th><th>申请事项</th><th>活动简介</th><th>部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="${colSpan}" class="empty">暂无申请记录</td></tr>`}</tbody>
       </table></div>
     </div>`;
@@ -662,8 +671,8 @@ function renderApplySummary() {
   const excelEl = $('#summaryExportExcel');
   if (excelEl) excelEl.onclick = () => {
     if (!shown.length) { toast('当前筛选条件下无可导出的记录'); return; }
-    const rows = shown.slice().reverse().map((a) => [a.name, a.sno || '—', a.typeName, a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);
-    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '申请事项', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
+    const rows = shown.slice().reverse().map((a) => [a.name, a.sno || '—', a.typeName, applyBrief(a), a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);
+    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
   };
   bindApplyView();
 }
