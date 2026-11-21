@@ -70,7 +70,7 @@ function _batchJpegToPdf(jpegBytes, imgW, imgH) {
   const scale = Math.min(availW / imgW, availH / imgH);
   const w = imgW * scale, h = imgH * scale;
   const x = (pageW - w) / 2, y = (pageH - h) / 2;
-  const content = `q\n${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} cm\n/Im0 Do\nQ\n`;
+  const content = `q\n${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ\n`;
   const enc = (s) => new TextEncoder().encode(s);
   const contentBytes = enc(content);
 

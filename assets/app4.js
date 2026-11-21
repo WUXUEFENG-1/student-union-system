@@ -603,6 +603,7 @@ function renderApplySummary() {
   const headCheck = canDel ? '<th style="width:38px"><input type="checkbox" id="summaryCheckAll"></th>' : '';
   const bulkBtn = canDel ? '<button class="primary-btn light del" id="summaryBulkDel" disabled>批量删除（0）</button>' : '';
   const bulkPdfBtn = canDel ? '<button class="primary-btn light" id="summaryBulkPdf" disabled>批量导出 PDF（0）</button>' : '';
+  const excelBtn = '<button class="primary-btn light" id="summaryExportExcel">导出 Excel</button>';
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
@@ -610,6 +611,7 @@ function renderApplySummary() {
         <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           ${bulkBtn}
           ${bulkPdfBtn}
+          ${excelBtn}
           <div class="field" style="min-width:180px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
           <div class="field" style="min-width:150px"><label>部门</label><select id="summaryDept">${deptOptHtml}</select></div>
           <div class="field" style="min-width:150px"><label>状态</label><select id="summaryStatus">${statusOptHtml}</select></div>
@@ -657,6 +659,12 @@ function renderApplySummary() {
       batchExportApplyPdf(ids);
     };
   }
+  const excelEl = $('#summaryExportExcel');
+  if (excelEl) excelEl.onclick = () => {
+    if (!shown.length) { toast('当前筛选条件下无可导出的记录'); return; }
+    const rows = shown.slice().reverse().map((a) => [a.name, a.sno || '—', a.typeName, a.dept, a.title || '成员', a.date || '', a.status, applyStages(a).join(' → '), applyTrackHtml(a)]);
+    exportTable('excel', '申请事宜汇总_' + today(), ['申请人', '学号', '申请事项', '部门', '职务', '提交时间', '状态', '审批流程', '审批轨迹'], rows);
+  };
   bindApplyView();
 }
 
