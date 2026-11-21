@@ -343,7 +343,7 @@ function rebindApplyView() {
     btn.onclick = () => {
       const a = db.applies.find((x) => x.id === btn.dataset.applyUndo);
       if (!a) return;
-      if (typeof canUndoApproval === 'function' && !canUndoApproval(a)) { toast('该申请当前节点尚未处理或已终审，不可撤销'); return; }
+      if (typeof canUndoApproval === 'function' && !canUndoApproval(a)) { toast('仅可撤回本人最后一步审批；部长/副部长仅限本部门，终审需先由主席团撤回'); return; }
       undoApproval(a);
     };
   });

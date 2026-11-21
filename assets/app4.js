@@ -331,39 +331,85 @@ function openBulkRejectForm(ids) {
 }
 
 /* 是否可撤销本人上一步通过：申请仍在途（未终审、未终止），且当前登录人是上一节点的通过人 */
+/* 是否可撤回本人审批：仅能撤回“最后一个通过动作”是本人的那一步。
+ * - 部长/副部长：仅限本部门，且只能撤首节点（主席团终审撤回后，部长这一步才会成为最后一步）；
+ * - 主席团：仅可撤回自己主席团节点的审批；
+ * - 已通过/已答复的终审记录也可逐级撤回，撤回首节点时退回本人草稿。 */
 function canUndoApproval(a) {
   if (!cur || !a) return false;
-  if (!['待审核', '审核中', '待分派', '处理中'].includes(a.status)) return false;
-  const stage = a.stage || 0;
-  if (stage <= 0) return false;
+  if (typeof isSelf === 'function' && isSelf(a)) return false;
+  if (!['待审核', '审核中', '待分派', '处理中', '已通过', '已答复'].includes(a.status)) return false;
+  const passTracks = (a.track || []).filter((t) => /通过$/.test(t.action || ''));
+  if (!passTracks.length) return false;
+  const lastPass = passTracks[passTracks.length - 1];
+  if (lastPass.actor !== cur.name) return false;
+  const label = (lastPass.action || '').replace(/通过$/, '');
   const stages = applyStages(a);
-  const prevLabel = stages[stage - 1];
-  if (!prevLabel) return false;
-  const mine = (a.track || []).filter((t) => t.action === prevLabel + '通过' && t.actor === cur.name).pop();
-  return !!mine;
+  const nodeIdx = stages.indexOf(label);
+  if (cur.role === 'minister') {
+    if (a.dept !== cur.dept) return false; // 部长/副部长仅本部门
+    if (nodeIdx !== 0) return false;      // 部长只能撤首节点；主席团未撤回前最后一步不是部长
+  } else if (cur.role === 'presidium') {
+    if (nodeIdx < 1) return false;        // 主席团撤上级节点
+  } else {
+    return false;
+  }
+  return true;
 }
 
-/* 撤销本人审批通过：退回上一节点重新审批，移除该步轨迹与签字；终审已通过的不在此列 */
+/* 回滚终审通过时发放的副作用：志愿时长、证明/认定编号、锁定状态等 */
+function rollbackApproved(a) {
+  const mem = db.members.find((m) => m.name === a.name) || db.members.find((m) => m.sno === a.sno);
+  const v = a.values || {};
+  if (a.type === 'volunteer' && mem) {
+    mem.volunteerHours = Math.max(0, (Number(mem.volunteerHours) || 0) - (Number(v.hours) || 0));
+    a.volNo = ''; a.approvedAt = '';
+  }
+  if (a.type === 'cert') a.certNo = '';
+  if (a.type === 'publicLeave') { a.locked = false; a.proofNo = ''; a.approvedAt = ''; }
+}
+
+/* 撤回本人审批：撤首节点 → 退回本人草稿；撤上级节点 → 退回上一审批节点。 */
 function undoApproval(a) {
   const stages = applyStages(a);
-  const stage = a.stage || 0;
-  const prevLabel = stages[stage - 1];
-  if (!prevLabel) return;
-  if (!confirm(`确定撤销你在【${prevLabel}】的审批通过？申请将退回该节点重新审批。`)) return;
-  const mine = (a.track || []).filter((t) => t.action === prevLabel + '通过' && t.actor === cur.name).pop();
-  if (mine) { const idx = a.track.lastIndexOf(mine); if (idx >= 0) a.track.splice(idx, 1); }
+  const passTracks = (a.track || []).filter((t) => /通过$/.test(t.action || ''));
+  const lastPass = passTracks[passTracks.length - 1];
+  const label = (lastPass.action || '').replace(/通过$/, '');
+  const nodeIdx = stages.indexOf(label);
+  const toDraft = nodeIdx === 0;
+  const tip = toDraft ? '撤回后该申请将退回本人草稿，由申请人修改后重新提交。' : '撤回后将退回上一审批节点重新审批。';
+  if (!confirm(`确定撤回你在【${label}】的审批通过？${tip}`)) return;
+
+  const idx = a.track.lastIndexOf(lastPass);
+  if (idx >= 0) a.track.splice(idx, 1);
   const signs = a.approveSigns || [];
-  const signIdx = [...signs].map((s, i) => (s.action === prevLabel && s.actor === cur.name ? i : -1)).filter((i) => i >= 0).pop();
+  const signIdx = [...signs].map((s, i) => (s.action === label && s.actor === cur.name ? i : -1)).filter((i) => i >= 0).pop();
   if (signIdx != null) signs.splice(signIdx, 1);
-  if (stage - 1 === 0) { a.signMinister = ''; a.phoneMinister = ''; }
-  if (stage - 1 === 1) { a.signChair = ''; a.phoneChair = ''; }
-  a.stage = stage - 1;
-  a.status = a.type === 'feedback' ? '处理中' : '审核中';
-  a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: `撤销【${prevLabel}】审批`, note: '', time: today() });
-  sendApplyMsg(a, `你的「${a.typeName}」在【${prevLabel}】的审批已被撤销，将由该节点重新审批。`, { title: '审批撤销提醒' });
-  commit('撤销审批', `${a.typeName} · ${a.name} ← 撤销【${prevLabel}】`);
-  save(); render();
-  toast('已撤销该审批，申请退回上一节点');
+
+  if (toDraft) {
+    a.status = '草稿';
+    a.stage = 0;
+    a.locked = false;
+    a.signMinister = ''; a.phoneMinister = ''; a.signChair = ''; a.phoneChair = '';
+    a.approveSigns = [];
+    rollbackApproved(a);
+    a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '撤回审批（退回本人草稿）', note: '', time: today() });
+    sendApplyMsg(a, `你的「${a.typeName}」审批已被撤回，退回草稿，请修改后重新提交。`, { title: '审批撤回提醒' });
+    commit('撤回审批（草稿）', `${a.typeName} · ${a.name} ← ${label}`);
+    save(); render();
+    toast('已撤回，申请退回本人草稿');
+  } else {
+    a.stage = nodeIdx;
+    a.status = a.type === 'feedback' ? '处理中' : '审核中';
+    if (nodeIdx - 1 === 0) { a.signMinister = ''; a.phoneMinister = ''; }
+    if (nodeIdx - 1 === 1) { a.signChair = ''; a.phoneChair = ''; }
+    rollbackApproved(a);
+    a.track.push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: `撤回【${label}】审批`, note: '', time: today() });
+    sendApplyMsg(a, `你的「${a.typeName}」在【${label}】的审批已被撤回，将由该节点重新审批。`, { title: '审批撤回提醒' });
+    commit('撤回审批', `${a.typeName} · ${a.name} ← ${label}`);
+    save(); render();
+    toast('已撤回该审批，退回上一节点');
+  }
 }
 /* 当前登录人收到的消息（按姓名投递，重名时以学号区分展示） */
 function myMsgs() {
@@ -470,7 +516,7 @@ function applyRow(a, review, bulk) {
     ops.push(`<button class="link-btn" data-apply-pass="${a.id}">通过</button>`);
     ops.push(`<button class="link-btn del" data-apply-reject="${a.id}">驳回</button>`);
   }
-  if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤销审批</button>`);
+  if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤回</button>`);
   const who = review ? `<td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div></td>` : '<td></td>';
   return `<tr>${checkCell}${who}<td><span class="badge blue">${esc(a.typeName)}</span></td><td>${esc(a.dept)}</td><td class="nowrap">${esc(a.date)}</td><td>${badge(a.status)}</td><td><span class="cell-sub">${applyTrackHtml(a)}</span></td><td><div class="row-actions">${ops.join('')}</div></td></tr>`;
 }
@@ -591,7 +637,7 @@ function renderApplySummary() {
   const rows = shown.slice().reverse().map((a) => {
     const flow = applyStages(a).join(' → ');
     const ops = [`<button class="link-btn" data-apply-view="${a.id}">查看</button>`];
-    if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤销审批</button>`);
+    if (canUndoApproval(a)) ops.push(`<button class="link-btn del" data-apply-undo="${a.id}">撤回</button>`);
     if (canDel) ops.push(`<button class="link-btn del" data-apply-summary-del="${a.id}">删除</button>`);
     const checkCell = canDel ? `<td><input type="checkbox" class="summary-check" data-apply-check="${a.id}"></td>` : '';
     return `<tr>
@@ -889,7 +935,7 @@ function renderJoin() {
     b.onclick = () => {
       const a = db.applies.find((x) => x.id === b.dataset.applyUndo);
       if (!a) return;
-      if (!canUndoApproval(a)) { toast('该申请当前节点尚未处理或已终审，不可撤销'); return; }
+      if (!canUndoApproval(a)) { toast('仅可撤回本人最后一步审批；部长/副部长仅限本部门，终审需先由主席团撤回'); return; }
       undoApproval(a);
     };
   });
