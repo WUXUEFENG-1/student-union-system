@@ -491,12 +491,13 @@ function exportPublicLeave(a, fmt, archive) {
   commit(archive ? '导出公假证明存档' : '下载公假证明', `${a.proofNo} · ${a.name}（${ROLE_NAMES[cur.role]}）`);
 }
 function applyRow(a, review, bulk) {
-  const ministerApprover = cur.role === 'minister' && a.dept === cur.dept && !isMinisterApplicant(a);
-  const canReview = allPower() || ministerApprover;
   const pending = ['待审核', '审核中', '待分派', '处理中'].includes(a.status);
   const stage0 = (a.stage || 0) === 0;
   const terminalRejected = ['已驳回', '已撤回', '已作废'].includes(a.status);
-  const bulkEligible = !!(bulk && review && pending && typeof canApprove === 'function' && canApprove(a));
+  /* 单条操作按钮与批量勾选统一按当前节点审批权限判定：无权行既不显示通过/驳回，也不渲染勾选框，
+     避免出现“有操作按钮却无法批量勾选”的口径不一致。 */
+  const eligible = typeof canApprove === 'function' && canApprove(a);
+  const bulkEligible = !!(bulk && review && pending && eligible);
   const checkCell = bulkEligible ? `<td><input type="checkbox" class="review-check" data-review-check="${a.id}"></td>` : (bulk ? '<td></td>' : '');
   const withdrawable = !review && stage0 && pending;
   const deletable = !review && (stage0 || terminalRejected);
@@ -512,7 +513,7 @@ function applyRow(a, review, bulk) {
   if (deletable) {
     ops.push(`<button class="link-btn del" data-apply-del="${a.id}">删除</button>`);
   }
-  if (review && canReview && pending) {
+  if (review && eligible && pending) {
     ops.push(`<button class="link-btn" data-apply-pass="${a.id}">通过</button>`);
     ops.push(`<button class="link-btn del" data-apply-reject="${a.id}">驳回</button>`);
   }

@@ -259,15 +259,16 @@ function renderPersonnel() {
         onSubmit(d) {
           const newTitle = d.title;
           const newDept = d.dept || m.dept;
+          const nowIso = new Date().toISOString();
           db.personnel.push({ id: uid('p'), name: m.name, action: '提升', from: m.title, to: newTitle, operator: cur.name, date: today() });
-          m.title = newTitle; m.dept = newDept;
+          m.title = newTitle; m.dept = newDept; m.updatedAt = nowIso;
           /* 账号三级回退匹配：账号绑定 → 姓名+学号 → 姓名；避免老成员未绑账号时职务部门不同步 */
           let acc = db.accounts.find((a) => a.username === m.account)
             || db.accounts.find((a) => a.name === m.name && (a.sno === m.sno || a.sno === '—' || m.sno === '—'))
             || db.accounts.find((a) => a.name === m.name);
           if (acc) {
             if (!m.account) m.account = acc.username;
-            acc.title = newTitle; acc.dept = newDept;
+            acc.title = newTitle; acc.dept = newDept; acc.updatedAt = nowIso;
             if (!['admin', 'teacher'].includes(acc.role)) acc.role = roleFromTitle(newTitle);
           }
           /* 同步刷新该成员名下全部在途流程的部门/职务/角色，审批链与部门过滤跟随最新台账；历史终态记录留痕不动 */

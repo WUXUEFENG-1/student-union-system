@@ -145,6 +145,30 @@
     });
   }
 
+  /* 主数据择优保留：成员/账号以云端为底（防止已删除成员在本机复活），
+     但若本机该记录带更新的 updatedAt（如刚做过职务/部门调整且尚未上云），
+     则把本机较新的部门/职务等字段回填云端底数，避免刷新时被云端旧值覆盖回旧部门。 */
+  function mergeMasterPreserve(remote, local) {
+    const bizM = ['dept', 'title', 'phone', 'class', 'sno', 'gender', 'ethnicity', 'politics', 'account'];
+    const bizA = ['dept', 'title', 'phone', 'class', 'sno'];
+    const rM = new Map((remote.members || []).map((m) => [m.id || (m.name + '|' + m.sno), m]));
+    (local.members || []).forEach((lm) => {
+      const rm = rM.get(lm.id || (lm.name + '|' + lm.sno));
+      if (rm && lm.updatedAt && (!rm.updatedAt || lm.updatedAt > rm.updatedAt)) {
+        bizM.forEach((f) => { if (lm[f] != null) rm[f] = lm[f]; });
+        rm.updatedAt = lm.updatedAt;
+      }
+    });
+    const rA = new Map((remote.accounts || []).map((a) => [a.username, a]));
+    (local.accounts || []).forEach((la) => {
+      const ra = rA.get(la.username);
+      if (ra && la.updatedAt && (!ra.updatedAt || la.updatedAt > ra.updatedAt)) {
+        bizA.forEach((f) => { if (la[f] != null) ra[f] = la[f]; });
+        ra.updatedAt = la.updatedAt;
+      }
+    });
+  }
+
   function pushLocal() {
     return readRemoteRetry().then(function (row) {
       /* 以本机快照为底稿推送：成员/账号/部门等主数据的增删改都以本机为准，
@@ -235,9 +259,9 @@
     return target;
   }
 
-  /* 把 local 的流水并入 remote（拉取云端时用） */
-  function mergeBoth(remote, local) {
-    return mergeUnionsInto(remote, local, local.__removed || {});
+  /* 把 local 的流水并入 remote（拉取云端时用）；gone 为两端合并后的墓碑 */
+  function mergeBoth(remote, local, gone) {
+    return mergeUnionsInto(remote, local, gone || local.__removed || {});
   }
 
   /* 用云端数据覆盖本机（云端为准，删除才会真正生效）；同时并入本机尚未上云的流水新增，
@@ -246,11 +270,17 @@
     const remote = normalize(JSON.parse(JSON.stringify(row.data)));
     const local = cleanSnapshot();
     const before = JSON.stringify(remote);
-    mergeBoth(remote, local);
+    const gone = mergeGone(local.__removed, remote.__removed);
+    mergeBoth(remote, local, gone);
     /* 本机较新的密码不被云端旧快照覆盖（按 pwdAt 择优） */
     mergePasswords(remote, local);
+    /* 本机刚调整、尚未上云的成员部门/职务不被云端旧值覆盖 */
+    mergeMasterPreserve(remote, local);
+    /* 底数校正：云端底数里落在墓碑、且本机也已不存在的旧副本一并剔除，
+       避免早期种子/已删记录残留在云端快照中，每次刷新又被拉回显示（删除复活）。 */
+    reconcileStale(remote, local, gone);
     /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
-    remote.__removed = mergeGone(local.__removed, remote.__removed);
+    remote.__removed = gone;
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     persistLocal();
