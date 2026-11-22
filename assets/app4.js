@@ -126,7 +126,7 @@ function applyTrackHtml(a) {
   return (a.track || []).map((t) => `${esc(t.action)}·${esc(t.actor)}`).join('；') || '—';
 }
 /* 申请对应的活动名称：志愿取活动名称，公假取活动名称，不附简介说明 */
-function applyBrief(a) {
+function applyName(a) {
   const v = a.values || {};
   return v.activityName || v.activity || '—';
 }
@@ -602,7 +602,7 @@ function bindApplyView() {
 let summaryTypeFilter = '全部';
 let summaryStatusFilter = '全部';
 let summaryDeptFilter = '全部';
-let summaryBriefFilter = '全部';
+let summaryNameFilter = '全部';
 let reviewTypeFilter = '全部';
 let reviewDeptFilter = '全部';
 let reviewStatusFilter = '全部';
@@ -622,21 +622,21 @@ function renderApplySummary() {
   const STATUS_ORDER = ['待审核', '审核中', '待分派', '处理中', '已通过', '已驳回', '已撤回', '已作废', '已撤销'];
   const statusNames = ['全部', ...STATUS_ORDER.filter((s) => list.some((a) => a.status === s)), ...Array.from(new Set(list.map((a) => a.status))).filter((s) => !STATUS_ORDER.includes(s))];
   const deptNames = ['全部', ...Array.from(new Set(list.map((a) => a.dept).filter(Boolean)))];
-  const briefNames = ['全部', ...Array.from(new Set(list.map(applyBrief).filter((b) => b && b !== '—')))];
+  const nameNames = ['全部', ...Array.from(new Set(list.map(applyName).filter((b) => b && b !== '—')))];
   if (!typeNames.includes(summaryTypeFilter)) summaryTypeFilter = '全部';
   if (!statusNames.includes(summaryStatusFilter)) summaryStatusFilter = '全部';
   if (!deptNames.includes(summaryDeptFilter)) summaryDeptFilter = '全部';
-  if (!briefNames.includes(summaryBriefFilter)) summaryBriefFilter = '全部';
+  if (!nameNames.includes(summaryNameFilter)) summaryNameFilter = '全部';
   let shown = list;
   if (summaryTypeFilter !== '全部') shown = shown.filter((a) => a.typeName === summaryTypeFilter);
   if (summaryStatusFilter !== '全部') shown = shown.filter((a) => a.status === summaryStatusFilter);
   if (summaryDeptFilter !== '全部') shown = shown.filter((a) => a.dept === summaryDeptFilter);
-  if (summaryBriefFilter !== '全部') shown = shown.filter((a) => applyBrief(a) === summaryBriefFilter);
+  if (summaryNameFilter !== '全部') shown = shown.filter((a) => applyName(a) === summaryNameFilter);
   const scopeText = seeAll ? '可查看全部部门申请' : `仅可查看本部门（${esc(cur.dept)}）申请`;
   const optHtml = typeNames.map((t) => `<option ${t === summaryTypeFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const statusOptHtml = statusNames.map((t) => `<option ${t === summaryStatusFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const deptOptHtml = deptNames.map((t) => `<option ${t === summaryDeptFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
-  const briefOptHtml = briefNames.map((t) => `<option ${t === summaryBriefFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
+  const nameOptHtml = nameNames.map((t) => `<option ${t === summaryNameFilter ? 'selected' : ''}>${esc(t)}</option>`).join('');
   const canDel = ['admin', 'presidium'].includes(cur.role);
   const colSpan = canDel ? 10 : 9;
   const rows = shown.slice().reverse().map((a) => {
@@ -649,7 +649,7 @@ function renderApplySummary() {
       ${checkCell}
       <td><strong>${esc(a.name)}</strong><div class="cell-sub">${esc(a.sno)}</div><div class="cell-sub">${esc(a.class || '—')}</div></td>
       <td><span class="badge blue">${esc(a.typeName)}</span></td>
-      <td><div class="cell-sub">${esc(applyBrief(a))}</div></td>
+      <td><div class="cell-sub">${esc(applyName(a))}</div></td>
       <td class="nowrap">${esc(a.dept)}</td>
       <td class="nowrap">${esc(a.title || '成员')}</td>
       <td class="nowrap">${esc(a.date)}</td>
@@ -665,19 +665,19 @@ function renderApplySummary() {
   $('#views').innerHTML = `
     <div class="card">
       <div class="card-head">
-        <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，可按事项 / 活动简介 / 部门 / 状态组合筛选，审批流程与轨迹全程留痕</div></div>
+        <div><h2>申请事宜汇总</h2><div class="sub">${scopeText}；共 ${shown.length} 条申请，可按事项 / 活动名称 / 部门 / 状态组合筛选，审批流程与轨迹全程留痕</div></div>
         <div class="toolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           ${bulkBtn}
           ${bulkPdfBtn}
           ${excelBtn}
           <div class="field" style="min-width:180px"><label>申请事项</label><select id="summaryType">${optHtml}</select></div>
-          <div class="field" style="min-width:180px"><label>活动简介</label><select id="summaryBrief">${briefOptHtml}</select></div>
+          <div class="field" style="min-width:180px"><label>活动名称</label><select id="summaryName">${nameOptHtml}</select></div>
           <div class="field" style="min-width:150px"><label>部门</label><select id="summaryDept">${deptOptHtml}</select></div>
           <div class="field" style="min-width:150px"><label>状态</label><select id="summaryStatus">${statusOptHtml}</select></div>
         </div>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr>${headCheck}<th>申请人</th><th style="min-width:150px">申请事项</th><th>活动简介</th><th style="min-width:92px">部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
+        <thead><tr>${headCheck}<th>申请人</th><th style="min-width:150px">申请事项</th><th>活动名称</th><th style="min-width:92px">部门</th><th>职务</th><th>提交时间</th><th>状态</th><th>审批流程 / 轨迹</th><th>操作</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="${colSpan}" class="empty">暂无申请记录</td></tr>`}</tbody>
       </table></div>
     </div>`;
@@ -687,8 +687,8 @@ function renderApplySummary() {
   if (deptSel) deptSel.onchange = () => { summaryDeptFilter = deptSel.value; render(); };
   const statusSel = $('#summaryStatus');
   if (statusSel) statusSel.onchange = () => { summaryStatusFilter = statusSel.value; render(); };
-  const briefSel = $('#summaryBrief');
-  if (briefSel) briefSel.onchange = () => { summaryBriefFilter = briefSel.value; render(); };
+  const nameSel = $('#summaryName');
+  if (nameSel) nameSel.onchange = () => { summaryNameFilter = nameSel.value; render(); };
   if (canDel) {
     const checks = () => [...document.querySelectorAll('.summary-check')];
     const updateBulk = () => {
@@ -726,11 +726,11 @@ function renderApplySummary() {
     const rows = shown.slice().reverse().map((a) => {
       const v = a.values || {};
       const hours = (v.hours != null && v.hours !== '') ? v.hours : '—';
-      return [a.name, a.sno || '—', a.class || '—', hours, a.typeName, applyBrief(a), a.dept, a.title || '成员', a.date || '', a.status];
+      return [a.name, a.sno || '—', a.class || '—', hours, a.typeName, applyName(a), a.dept, a.title || '成员', a.date || '', a.status];
     });
     const typeLabel = summaryTypeFilter === '全部' ? '全部' : summaryTypeFilter;
     const docTitle = `云南工业信息职业学院应用经济系学生会学生申请事宜汇总（${typeLabel}）（${today()}）`;
-    exportTable('excel', `申请事宜汇总_${typeLabel}_${today()}`, ['申请人', '学号', '班级', '时长', '申请事项', '活动简介', '部门', '职务', '提交时间', '状态'], rows, docTitle);
+    exportTable('excel', `申请事宜汇总_${typeLabel}_${today()}`, ['申请人', '学号', '班级', '时长', '申请事项', '活动名称', '部门', '职务', '提交时间', '状态'], rows, docTitle);
   };
   bindApplyView();
 }
