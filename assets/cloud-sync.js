@@ -157,6 +157,7 @@
         mergeUnionsInto(snap, remote, gone);
         mergePasswords(snap, remote);
         snap.__removed = gone;
+        pruneGone(snap);
         /* 防御：本机为空种子台账（无成员、无普通账号）而云端有真实名单时，主数据保留云端，避免空台账把云端名单整份覆盖 */
         const seedLike = !(snap.members || []).length && !(snap.accounts || []).filter((a) => !['admin', 'teacher'].includes(a.role)).length;
         if (seedLike && (remote.members || []).length) {
@@ -197,7 +198,8 @@
     if (aPending !== bPending) return aPending ? b : a;
     return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
   }
-  /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；gone 里的墓碑条目不再并回 */
+  /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；gone 里的墓碑条目只阻止 source 旧副本并回，
+     target 底数中现存的记录一律保留（云端已恢复/他人仍持有的记录，不被本机旧墓碑剔除）。 */
   function mergeUnionsInto(target, source, gone) {
     gone = gone || {};
     UNION_ARRAYS.forEach(function (k) {
@@ -206,7 +208,7 @@
       if (!tArr.length && !sArr.length) return;
       const remIds = new Set(gone[k] || []);
       const map = new Map();
-      tArr.forEach(function (x) { const id = idOf(x); if (!remIds.has(id)) map.set(id, x); });
+      tArr.forEach(function (x) { const id = idOf(x); map.set(id, x); });
       sArr.forEach(function (x) {
         const id = idOf(x);
         if (remIds.has(id)) return;
@@ -215,6 +217,17 @@
       target[k] = Array.from(map.values());
     });
     return target;
+  }
+
+  /* 清理墓碑：已重新出现在现存台账里的条目，其删除墓碑立即失效，避免旧墓碑在后续合并中把现存记录再次剔除。 */
+  function pruneGone(snap) {
+    snap.__removed = snap.__removed || {};
+    UNION_ARRAYS.forEach(function (k) {
+      const alive = new Set((snap[k] || []).map(idOf));
+      if (!alive.size) return;
+      snap.__removed[k] = (snap.__removed[k] || []).filter(function (id) { return !alive.has(id); });
+    });
+    return snap;
   }
 
   /* 把 local 的流水并入 remote（拉取云端时用） */
@@ -231,8 +244,9 @@
     mergeBoth(remote, local);
     /* 本机较新的密码不被云端旧快照覆盖（按 pwdAt 择优） */
     mergePasswords(remote, local);
-    /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
+    /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活；现存记录对应的旧墓碑随即失效 */
     remote.__removed = mergeGone(local.__removed, remote.__removed);
+    pruneGone(remote);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     persistLocal();
