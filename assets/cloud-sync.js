@@ -154,10 +154,10 @@
         const remote = normalize(JSON.parse(JSON.stringify(row.data)));
         /* 只把云端的流水记录并入本机，避免冲掉他人刚提交、本机尚未拉取的申请/日志 */
         const gone = mergeGone(snap.__removed, remote.__removed);
-        mergeUnionsInto(snap, remote, gone);
+        mergeUnionsInto(snap, remote, gone, true);
+        reconcileStale(snap, remote, gone);
         mergePasswords(snap, remote);
         snap.__removed = gone;
-        pruneGone(snap);
         /* 防御：本机为空种子台账（无成员、无普通账号）而云端有真实名单时，主数据保留云端，避免空台账把云端名单整份覆盖 */
         const seedLike = !(snap.members || []).length && !(snap.accounts || []).filter((a) => !['admin', 'teacher'].includes(a.role)).length;
         if (seedLike && (remote.members || []).length) {
@@ -198,9 +198,10 @@
     if (aPending !== bPending) return aPending ? b : a;
     return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
   }
-  /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；gone 里的墓碑条目只阻止 source 旧副本并回，
-     target 底数中现存的记录一律保留（云端已恢复/他人仍持有的记录，不被本机旧墓碑剔除）。 */
-  function mergeUnionsInto(target, source, gone) {
+  /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；
+     target 底数现存记录一律保留；source 为非权威一端（本机离线新增）时，gone 墓碑阻止其旧副本并回；
+     source 为权威一端（云端现存）时不受墓碑过滤，避免云端已恢复的记录被本机旧墓碑剔除。 */
+  function mergeUnionsInto(target, source, gone, sourceAuthoritative) {
     gone = gone || {};
     UNION_ARRAYS.forEach(function (k) {
       const tArr = Array.isArray(target[k]) ? target[k] : [];
@@ -211,7 +212,7 @@
       tArr.forEach(function (x) { const id = idOf(x); map.set(id, x); });
       sArr.forEach(function (x) {
         const id = idOf(x);
-        if (remIds.has(id)) return;
+        if (!sourceAuthoritative && remIds.has(id)) return;
         map.set(id, map.has(id) ? newer(map.get(id), x) : x);
       });
       target[k] = Array.from(map.values());
@@ -219,15 +220,19 @@
     return target;
   }
 
-  /* 清理墓碑：已重新出现在现存台账里的条目，其删除墓碑立即失效，避免旧墓碑在后续合并中把现存记录再次剔除。 */
-  function pruneGone(snap) {
-    snap.__removed = snap.__removed || {};
+  /* 本机底数校正：墓碑标记的旧副本，若云端已不现存，则从本机底数剔除，避免旧缓存把已删除记录推回云端；
+     云端仍现存的记录（含被恢复的）不受墓碑影响，予以保留。 */
+  function reconcileStale(target, remote, gone) {
     UNION_ARRAYS.forEach(function (k) {
-      const alive = new Set((snap[k] || []).map(idOf));
-      if (!alive.size) return;
-      snap.__removed[k] = (snap.__removed[k] || []).filter(function (id) { return !alive.has(id); });
+      const remIds = new Set(gone[k] || []);
+      if (!remIds.size) return;
+      const remoteAlive = new Set((remote[k] || []).map(idOf));
+      target[k] = (target[k] || []).filter(function (x) {
+        const id = idOf(x);
+        return !(remIds.has(id) && !remoteAlive.has(id));
+      });
     });
-    return snap;
+    return target;
   }
 
   /* 把 local 的流水并入 remote（拉取云端时用） */
@@ -244,9 +249,8 @@
     mergeBoth(remote, local);
     /* 本机较新的密码不被云端旧快照覆盖（按 pwdAt 择优） */
     mergePasswords(remote, local);
-    /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活；现存记录对应的旧墓碑随即失效 */
+    /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
     remote.__removed = mergeGone(local.__removed, remote.__removed);
-    pruneGone(remote);
     Object.keys(db).forEach(function (k) { delete db[k]; });
     Object.assign(db, remote, { [FLAG]: row.updated_at || iso() });
     persistLocal();
