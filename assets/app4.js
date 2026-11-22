@@ -875,6 +875,8 @@ function renderJoin() {
           });
           commit('提交申请', `${cfg.name} · ${cur.name}`);
         }
+        save();
+        if (typeof window.__flushSync === 'function') window.__flushSync();
         render(); toast(existing ? '已修改并重新提交，等待审批' : '申请已提交');
       }
     });
