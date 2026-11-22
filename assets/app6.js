@@ -590,7 +590,7 @@ render = function () {
         if (tbody.querySelector(`[data-apply-view="${a.id}"]`)) return;
         if (typeof reviewMatchFilter === 'function' && !reviewMatchFilter(a)) return;
         if (!canApprove(a)) return;
-        const rowHtml = a.type === 'leaveclub' ? resignRow(a) : applyRow(a, true);
+        const rowHtml = a.type === 'leaveclub' ? resignRow(a) : applyRow(a, true, true);
         tbody.insertAdjacentHTML('beforeend', rowHtml);
       });
     });

@@ -994,8 +994,17 @@ function renderJoin() {
     if (reviewBulkReject) { reviewBulkReject.textContent = `批量驳回（${n}）`; reviewBulkReject.disabled = n === 0; }
     if (reviewAll) reviewAll.checked = n > 0 && n === reviewChecks().length;
   };
-  reviewChecks().forEach((c) => { c.onchange = updateReviewBulk; });
-  if (reviewAll) reviewAll.onchange = () => { reviewChecks().forEach((c) => { c.checked = reviewAll.checked; }); updateReviewBulk(); };
+  /* 勾选事件委托到待审批卡片：后续动态补插的有权行也能自动响应勾选、刷新批量计数，无需逐行重绑 */
+  const reviewCard = reviewAll ? reviewAll.closest('.card') : null;
+  if (reviewCard) {
+    reviewCard.addEventListener('change', function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('review-check')) updateReviewBulk();
+      else if (e.target && e.target.id === 'reviewCheckAll') { reviewChecks().forEach((c) => { c.checked = reviewAll.checked; }); updateReviewBulk(); }
+    });
+  } else {
+    reviewChecks().forEach((c) => { c.onchange = updateReviewBulk; });
+    if (reviewAll) reviewAll.onchange = () => { reviewChecks().forEach((c) => { c.checked = reviewAll.checked; }); updateReviewBulk(); };
+  }
   const rType = $('#reviewType');
   if (rType) rType.onchange = () => { reviewTypeFilter = rType.value; render(); };
   const rDept = $('#reviewDept');
