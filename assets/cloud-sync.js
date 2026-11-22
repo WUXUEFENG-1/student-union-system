@@ -178,8 +178,11 @@
         const remote = normalize(JSON.parse(JSON.stringify(row.data)));
         /* 只把云端的流水记录并入本机，避免冲掉他人刚提交、本机尚未拉取的申请/日志 */
         const gone = mergeGone(snap.__removed, remote.__removed);
+        const localGone = snap.__removed;
         mergeUnionsInto(snap, remote, gone, true);
         reconcileStale(snap, remote, gone);
+        /* 本机自己已删除的旧副本不随底稿推回云端 */
+        pruneTargetGone(snap, localGone);
         mergePasswords(snap, remote);
         snap.__removed = gone;
         /* 防御：本机为空种子台账（无成员、无普通账号）而云端有真实名单时，主数据保留云端，避免空台账把云端名单整份覆盖 */
@@ -255,6 +258,17 @@
         const id = idOf(x);
         return !(remIds.has(id) && !remoteAlive.has(id));
       });
+    });
+    return target;
+  }
+
+  /* 推送前按本机墓碑清理底稿：本机自己已删除（记入本机墓碑）的旧副本一律不上云，
+     避免旧缓存/旧终端把残留台账重新推回云端造成删除复活。被恢复的记录须先从墓碑摘除。 */
+  function pruneTargetGone(target, gone) {
+    UNION_ARRAYS.forEach(function (k) {
+      const remIds = new Set((gone && gone[k]) || []);
+      if (!remIds.size) return;
+      target[k] = (target[k] || []).filter(function (x) { return !remIds.has(idOf(x)); });
     });
     return target;
   }
