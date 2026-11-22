@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>门户 · 应用经济系学生会管理系统</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231657a6'/%3E%3Ctext x='16' y='21' font-size='15' fill='white' text-anchor='middle' font-family='sans-serif'%3E%E5%AD%A6%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --blue:#1657a6; --blue-d:#0f4382; --blue-l:#e8f1fb;
+    --bg:#f2f5fa; --card:#fff; --txt:#1f2d3d; --sub:#6b7a8d; --line:#e6ecf3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;}
+  a{text-decoration:none;color:inherit;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px;}
+
+  /* 顶部导航 */
+  .nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
+  .nav-inner{max-width:1080px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .logo{width:40px;height:40px;border-radius:12px;background:var(--blue);color:#fff;font-size:19px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .brand-col .school{font-size:12px;color:var(--sub);}
+  .brand-col strong{font-size:15px;}
+  .nav-actions{display:flex;align-items:center;gap:10px;}
+  .nav-link{font-size:14px;color:var(--sub);}
+  .nav-link:hover{color:var(--blue);}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;padding:11px 20px;font-size:15px;font-weight:600;cursor:pointer;border:none;}
+  .btn-primary{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(22,87,166,.26);}
+  .btn-primary:hover{background:var(--blue-d);}
+  .btn-ghost{background:#fff;color:var(--blue);border:1.5px solid var(--blue);}
+  .btn-ghost:hover{background:var(--blue-l);}
+
+  /* Hero */
+  .hero{padding:56px 0 40px;}
+  .hero-grid{display:grid;grid-template-columns:1.4fr .8fr;gap:32px;align-items:center;}
+  .hero .school{font-size:14px;color:var(--blue);letter-spacing:1px;font-weight:600;}
+  .hero h1{font-size:34px;line-height:1.3;margin:12px 0 14px;}
+  .hero p.lead{font-size:16px;color:var(--sub);max-width:520px;}
+  .hero-cta{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0;}
+  .tags{display:flex;flex-wrap:wrap;gap:10px;}
+  .tag{font-size:13px;color:var(--blue);background:var(--blue-l);border:1px solid #cfe2f6;border-radius:999px;padding:5px 13px;}
+  .hero-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;text-align:center;box-shadow:0 10px 30px rgba(31,45,61,.08);}
+  .hero-card img{width:170px;height:170px;border:1px solid var(--line);border-radius:14px;padding:8px;background:#fff;}
+  .hero-card p{font-size:13px;color:var(--sub);margin-top:12px;}
+
+  /* 通用区块 */
+  section{padding:36px 0;}
+  .sec-head{text-align:center;margin-bottom:28px;}
+  .sec-head h2{font-size:24px;}
+  .sec-head p{font-size:14px;color:var(--sub);margin-top:8px;}
+
+  /* 功能卡片 */
+  .grid-feat{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;transition:transform .15s,box-shadow .15s;}
+  .feat:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(31,45,61,.1);}
+  .feat .ico{width:46px;height:46px;border-radius:12px;background:var(--blue-l);display:flex;align-items:center;justify-content:center;font-size:23px;margin-bottom:14px;}
+  .feat h3{font-size:16px;margin-bottom:8px;}
+  .feat p{font-size:13px;color:var(--sub);line-height:1.7;}
+
+  /* 角色卡片 */
+  .grid-role{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+  .role{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;}
+  .role h3{font-size:15px;color:var(--blue);margin-bottom:8px;}
+  .role p{font-size:13px;color:var(--sub);line-height:1.7;}
+
+  /* 优势条 */
+  .adv{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .adv-item{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center;}
+  .adv-item .ico{font-size:26px;margin-bottom:10px;}
+  .adv-item h3{font-size:15px;margin-bottom:6px;}
+  .adv-item p{font-size:13px;color:var(--sub);}
+
+  /* 页脚 */
+  footer{margin-top:30px;border-top:1px solid var(--line);background:#fff;}
+  .foot-inner{max-width:1080px;margin:0 auto;padding:28px 20px;text-align:center;color:var(--sub);font-size:13px;line-height:1.9;}
+  .foot-inner strong{color:var(--txt);}
+
+  @media (max-width:900px){
+    .hero-grid{grid-template-columns:1fr;}
+    .grid-feat{grid-template-columns:repeat(2,1fr);}
+    .grid-role{grid-template-columns:repeat(2,1fr);}
+    .adv{grid-template-columns:repeat(2,1fr);}
+    .hero h1{font-size:27px;}
+  }
+  @media (max-width:560px){
+    .grid-feat,.grid-role,.adv{grid-template-columns:1fr;}
+    .brand-col .school{display:none;}
+    .nav-link{display:none;}
+    .hero{padding:36px 0 24px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="portal.html">
+      <div class="logo">学</div>
+      <div class="brand-col">
+        <div class="school">云南工业信息职业学院</div>
+        <strong>应用经济系学生会管理系统</strong>
+      </div>
+    </a>
+    <div class="nav-actions">
+      <a class="nav-link" href="download.html">安卓下载</a>
+      <a class="btn btn-primary" href="index.html">进入系统</a>
+    </div>
+  </div>
+</header>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="school">应用经济系 · 学生会办公与审批平台</div>
+      <h1>学生会日常事务<br>一站式线上协同</h1>
+      <p class="lead">覆盖成员人事、请假、活动、考核、通知与各类办事申请，逐级审批、全程留痕，数据云端实时同步，网页与安卓端均可使用。</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="index.html">进入系统 →</a>
+        <a class="btn btn-ghost" href="download.html">下载安卓端</a>
+      </div>
+      <div class="tags">
+        <span class="tag">多角色权限分级</span>
+        <span class="tag">逐级审批留痕</span>
+        <span class="tag">云端实时同步</span>
+        <span class="tag">多格式导出</span>
+      </div>
+    </div>
+    <div class="hero-card">
+      <img src="app/qr-download.png" alt="安卓端下载二维码">
+      <p>手机扫码，下载安卓安装包</p>
+    </div>
+  </div>
+</div>
+
+<!-- 功能模块 -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>功能模块</h2>
+      <p>学生会日常办公所需的主要业务，均在系统内线上完成</p>
+    </div>
+    <div class="grid-feat">
+      <div class="feat">
+        <div class="ico">👥</div>
+        <h3>成员人事</h3>
+        <p>成员台账、部门与职务管理，支持一键导入 Excel / CSV，资料与账号统一维护。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📝</div>
+        <h3>请假管理</h3>
+        <p>在线提交请假申请，按层级送审，申请人可撤回待审申请，状态全程可跟踪。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">🎉</div>
+        <h3>活动管理</h3>
+        <p>发布活动报名、设置名额上限，报名记录与活动申请逐级审批，可修改或撤销。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📊</div>
+        <h3>考核评定</h3>
+        <p>出勤、工作任务、思想纪律、群众评价四维度百分制录入，自动评定等级。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📨</div>
+        <h3>办事申请</h3>
+        <p>公假证明、志愿服务认定、退会、换届竞选、任职证明、意见反馈等多类申请在线办理。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📢</div>
+        <h3>通知公告</h3>
+        <p>按全员、指定部门或干部范围发布通知，支持图文与附件下发，可撤回留档。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📅</div>
+        <h3>例会与物资</h3>
+        <p>部门例会记录、物资登记与借用归还，考勤签到与物资借还一体管理。</p>
+      </div>
+      <div class="feat">
+        <div class="ico">📤</div>
+        <h3>汇总导出</h3>
+        <p>申请事宜统一汇总、组合筛选，支持导出 Excel / Word / PDF / CSV 与批量压缩包。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 角色分工 -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>角色与权限</h2>
+      <p>登录后菜单按角色动态生成，各岗位只看到与职责对应的功能</p>
+    </div>
+    <div class="grid-role">
+      <div class="role">
+        <h3>系统管理员</h3>
+        <p>全部后台权限：账号与人事管理、部门与活动终审、考核、通知与请假审批、系统监测与操作日志。</p>
+      </div>
+      <div class="role">
+        <h3>责任教师</h3>
+        <p>指导教师终审把关，活动终审、考核复核，查看人事与各类台账记录。</p>
+      </div>
+      <div class="role">
+        <h3>主席团</h3>
+        <p>活动一级审核、请假审批、成员任免与部门管理、考核复核，发布通知、收集表与活动报名。</p>
+      </div>
+      <div class="role">
+        <h3>部长团</h3>
+        <p>维护本部门信息与成员，提交部门活动，考核部内成员，审批部内请假，负责考勤与物资借还。</p>
+      </div>
+      <div class="role">
+        <h3>普通学生</h3>
+        <p>查看部门信息与通知，在「我的申请」提交各类申请、报名活动、填写信息收集表，维护个人资料。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 优势 -->
+<section>
+  <div class="wrap">
+    <div class="adv">
+      <div class="adv-item">
+        <div class="ico">🔐</div>
+        <h3>权限分级</h3>
+        <p>按角色动态显示菜单，越权操作不进入界面。</p>
+      </div>
+      <div class="adv-item">
+        <div class="ico">🧾</div>
+        <h3>审批留痕</h3>
+        <p>登录、审批、任免、导入、导出、删除等关键操作自动记录日志。</p>
+      </div>
+      <div class="adv-item">
+        <div class="ico">☁️</div>
+        <h3>云端同步</h3>
+        <p>数据经云端实时同步，本地缓存作为离线兜底，更换登录账号数据一致。</p>
+      </div>
+      <div class="adv-item">
+        <div class="ico">💻</div>
+        <h3>多端可用</h3>
+        <p>浏览器网页版直接使用，安卓手机可安装客户端，iPhone 可添加到主屏幕。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-inner">
+    <strong>云南工业信息职业学院 · 应用经济系学生会</strong><br>
+    应用经济系学生会管理系统门户 · 如遇登录或使用问题，请联系主席团或系统管理员
+  </div>
+</footer>
+
+</body>
+</html>
