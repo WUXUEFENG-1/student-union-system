@@ -188,10 +188,13 @@
      成员/账号/部门/人事等主数据仍以云端为准，防止已删除项在本机复活。 */
   const UNION_ARRAYS = ['applies', 'logs', 'leaves', 'events', 'notices', 'collects', 'sessions', 'assets', 'assessments', 'joinRequests', 'deptRequests', 'activities', 'msgs'];
   function idOf(x) { return x.id || x.username || (x.name + '|' + x.date + '|' + (x.typeName || x.type || '')); }
-  /* 比较两条同 id 记录哪条更新：审批/操作轨迹更长者为新，其次按时间字段 */
+  /* 比较两条同 id 记录哪条更新：审批/操作轨迹更长者为新；其次终态不被在途态覆盖；最后按时间字段 */
+  const PENDING_STATUS = ['待审核', '审核中', '待分派', '处理中'];
   function newer(a, b) {
     const ta = (a.track || []).length, tb = (b.track || []).length;
     if (ta !== tb) return ta > tb ? a : b;
+    const aPending = PENDING_STATUS.includes(a.status), bPending = PENDING_STATUS.includes(b.status);
+    if (aPending !== bPending) return aPending ? b : a;
     return String(a.updatedAt || a.date || a.time || '') >= String(b.updatedAt || b.date || b.time || '') ? a : b;
   }
   /* 把 source 的流水表并入 target（原地修改并返回）：并集 + 同 id 取较新；gone 里的墓碑条目不再并回 */

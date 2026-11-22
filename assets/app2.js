@@ -746,7 +746,7 @@ function renderLeave() {
       ],
       values: { start: today(), end: today() },
       onSubmit(d) {
-        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, attach: d.attach || '', attachData: d.attachData || '', status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today() });
+        db.leaves.push({ id: uid('l'), applicant: cur.name, applicantRole: cur.role, dept: cur.dept, type: d.type, start: d.start, end: d.end, reason: d.reason, attach: d.attach || '', attachData: d.attachData || '', status: '待审核', reviewer: LEAVE_REVIEWER[cur.role], reviewNote: '', date: today(), updatedAt: new Date().toISOString(), track: [{ actor: cur.name, role: ROLE_NAMES[cur.role], action: '提交请假', time: today() }] });
         commit('提交请假', `${d.type} ${d.start}—${d.end}`); render(); toast('请假申请已提交');
       }
     });
@@ -759,7 +759,7 @@ function renderLeave() {
         title: '通过请假 · ' + l.applicant,
         fields: [{ key: 'note', label: '审核意见' }],
         values: { note: '同意' },
-        onSubmit(d) { l.status = '已通过'; l.reviewNote = d.note; commit('审批请假', `${l.applicant} 通过`); save(); render(); toast('已通过请假申请'); }
+        onSubmit(d) { l.status = '已通过'; l.reviewNote = d.note; l.updatedAt = new Date().toISOString(); (l.track = l.track || []).push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '请假通过', note: d.note, time: today() }); commit('审批请假', `${l.applicant} 通过`); save(); render(); toast('已通过请假申请'); }
       });
     };
   });
@@ -769,7 +769,7 @@ function renderLeave() {
       openForm({
         title: '驳回请假 · ' + l.applicant,
         fields: [{ key: 'note', label: '驳回原因', type: 'textarea', required: true }],
-        onSubmit(d) { l.status = '已驳回'; l.reviewNote = d.note; commit('驳回请假', `${l.applicant}：${d.note}`); save(); render(); toast('已驳回请假申请'); }
+        onSubmit(d) { l.status = '已驳回'; l.reviewNote = d.note; l.updatedAt = new Date().toISOString(); (l.track = l.track || []).push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '驳回请假', note: d.note, time: today() }); commit('驳回请假', `${l.applicant}：${d.note}`); save(); render(); toast('已驳回请假申请'); }
       });
     };
   });
@@ -778,6 +778,8 @@ function renderLeave() {
       const l = db.leaves.find((x) => x.id === b.dataset.leaveRevoke);
       if (!confirm('确定撤回这条请假申请？撤回后不计入出勤。')) return;
       l.status = '已撤回';
+      l.updatedAt = new Date().toISOString();
+      (l.track = l.track || []).push({ actor: cur.name, role: ROLE_NAMES[cur.role], action: '申请人撤回', time: today() });
       commit('撤回请假', l.applicant); save(); render(); toast('请假申请已撤回，不计入出勤');
     };
   });
