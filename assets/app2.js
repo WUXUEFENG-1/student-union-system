@@ -227,7 +227,7 @@ function renderPersonnel() {
         { key: 'sno', label: '学号', required: true },
         { key: 'class', label: '班级' },
         { key: 'phone', label: '联系电话' },
-        { key: 'dept', label: '部门', placeholder: '如：宣传部 / 外联部' },
+        { key: 'dept', label: '部门', type: 'select', options: db.departments.filter((d) => d.status !== '已罢免').map((d) => d.name) },
         { key: 'title', label: '职务', type: 'select', options: TITLES },
         { key: 'account', label: '登录账号' },
         { key: 'password', label: '初始密码' }
@@ -253,7 +253,7 @@ function renderPersonnel() {
         title: '职务调整 · ' + m.name,
         fields: [
           { key: 'title', label: '新职务', type: 'select', options: TITLES },
-          { key: 'dept', label: '所属部门', placeholder: '如：主席团 / 文体部 / 外联部' }
+          { key: 'dept', label: '所属部门', type: 'select', options: db.departments.filter((d) => d.status !== '已罢免').map((d) => d.name) }
         ],
         values: { title: m.title, dept: m.dept },
         onSubmit(d) {
