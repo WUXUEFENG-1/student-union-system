@@ -181,6 +181,8 @@
         const localGone = snap.__removed;
         mergeUnionsInto(snap, remote, gone, true);
         reconcileStale(snap, remote, gone);
+        /* 两端仍存活的记录从合并墓碑摘除，避免旧墓碑拦截已恢复/现存记录 */
+        pruneGoneAlive(gone, [snap, remote]);
         /* 本机自己已删除的旧副本不随底稿推回云端 */
         pruneTargetGone(snap, localGone);
         mergePasswords(snap, remote);
@@ -262,6 +264,18 @@
     return target;
   }
 
+  /* 存活记录自动出墓碑：任一端现存（含被恢复/重新提交）的 id 不再视为已删除，
+     避免历史旧墓碑长期拦截已恢复记录，或把云端现存记录误判为旧副本剔除。 */
+  function pruneGoneAlive(gone, snapshots) {
+    UNION_ARRAYS.forEach(function (k) {
+      if (!gone[k] || !gone[k].length) return;
+      const alive = new Set();
+      snapshots.forEach(function (s) { (s[k] || []).forEach(function (x) { alive.add(idOf(x)); }); });
+      gone[k] = gone[k].filter(function (id) { return !alive.has(id); });
+    });
+    return gone;
+  }
+
   /* 推送前按本机墓碑清理底稿：本机自己已删除（记入本机墓碑）的旧副本一律不上云，
      避免旧缓存/旧终端把残留台账重新推回云端造成删除复活。被恢复的记录须先从墓碑摘除。 */
   function pruneTargetGone(target, gone) {
@@ -290,9 +304,10 @@
     mergePasswords(remote, local);
     /* 本机刚调整、尚未上云的成员部门/职务不被云端旧值覆盖 */
     mergeMasterPreserve(remote, local);
-    /* 底数校正：云端底数里落在墓碑、且本机也已不存在的旧副本一并剔除，
-       避免早期种子/已删记录残留在云端快照中，每次刷新又被拉回显示（删除复活）。 */
-    reconcileStale(remote, local, gone);
+    /* 云端为权威底数：云端现存记录一律保留，不用本机旧缓存是否存在反向剔除，
+       避免本机旧墓碑 + 旧台账缺条时把云端已通过/现存申请误删（重进消失）。
+       仅把两端都已存活的记录从墓碑摘除，旧墓碑不再长期拦截恢复/现存记录。 */
+    pruneGoneAlive(gone, [remote, local]);
     /* 本地删除墓碑并入云端快照，持久化后旧副本不再复活 */
     remote.__removed = gone;
     Object.keys(db).forEach(function (k) { delete db[k]; });
